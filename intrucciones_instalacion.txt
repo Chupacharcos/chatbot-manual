@@ -1,0 +1,51 @@
+INSTRUCCIONES DE INSTALACIÓN - CHATBOT MANUAL
+=============================================
+
+1. PREPARAR ENTORNO:
+   python -m venv venv
+   .\venv\Scripts\activate
+
+2. ACTUALIZAR PIP (IMPORTANTE):
+   python -m pip install --upgrade pip
+
+3. INSTALAR DEPENDENCIAS:
+   pip install -r requirements.txt
+
+4. CONFIGURAR API KEY:
+   Crear archivo .env con: GROQ_API_KEY=tu_clave_aqui
+
+5. PROCESAR MANUAL:
+   python src/process_manual.py
+
+6. EJECUTAR CHATBOT:
+   python src/chatbot.py
+
+VERIFICACIÓN:
+   python -c "from langchain_community.embeddings import HuggingFaceEmbeddings; print('✅ Embeddings funcionan')"
+
+ESTRUCTURA NECESARIA:
+chatbot-manual/
+├── requirements.txt
+├── .env
+├── data/manual.pdf
+└── src/
+    ├── process_manual.py
+    ├── rag_engine.py
+    └── chatbot.py
+
+SOLUCIÓN DE PROBLEMAS:
+
+- Si falla instalación: deactivate && Remove-Item -Recurse -Force venv
+
+- Si falta PDF: colocar manual en data/manual.pdf
+
+- Si error API: verificar clave en .env
+
+- Si error de imports: usar langchain_community.embeddings en lugar de langchain_huggingface
+
+- Si error de dependencias: ejecutar python -m pip install --upgrade pip primero
+
+ARCHIVOS IMPORTANTES ACTUALIZADOS:
+
+- rag_engine.py: usa from langchain_community.embeddings import HuggingFaceEmbeddings
+- process_manual.py: usa from langchain_community.embeddings import HuggingFaceEmbeddings

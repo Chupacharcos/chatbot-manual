@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+env/
+.env
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+
+# Datos sensibles
+data/*.pdf
+*.db
+chroma_db/
+C:/temp/chroma_db/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ChromaDB
+chroma_db/
+*/chroma_db/
