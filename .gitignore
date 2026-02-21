@@ -1,29 +1,32 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-venv/
-env/
+# ─── Seguridad ───────────────────────────────────────────────
 .env
-*.pyc
 
-# IDEs
-.vscode/
-.idea/
+# ─── PDFs del cliente (nunca subir) ─────────────────────────
+data/*.pdf
 
-# Datos sensibles
-data/
-*.pdf
-
-# Índices FAISS
+# ─── Índice FAISS (se genera con setup.sh) ──────────────────
 faiss_index/
-*.faiss
-*.pkl
 
-# Logs
-*.log
+# ─── Entorno virtual Python ─────────────────────────────────
+venv/
+.venv/
 
-# OS
+# ─── Generados por setup.sh ─────────────────────────────────
+start.sh
+chatbot_ejemplo.html
+
+# ─── Python ─────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ─── Modelos descargados ────────────────────────────────────
+*.bin
+*.pt
+*.safetensors
+
+# ─── Sistema ─────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
