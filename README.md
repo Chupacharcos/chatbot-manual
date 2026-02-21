@@ -1,13 +1,17 @@
 # 🤖 Chatbot RAG - Manual Empresarial
 
-Sistema de chatbot inteligente con RAG usando FAISS.
+Sistema de chatbot inteligente con RAG (Retrieval-Augmented Generation) usando FAISS y re-ranking semántico.
 
 ## 🛠️ Stack
 
 - Python 3.11+
-- LangChain
-- FAISS
-- Groq API (Llama 3.3)
+- FAISS (búsqueda semántica)
+- Sentence Transformers + Cross-Encoder (embeddings y re-ranking)
+- Groq API (Llama 3.3 70B)
+
+## 🌍 Idiomas soportados
+
+`es` Español · `en` English · `ca` Català · `pt` Português
 
 ## 📋 Instalación
 ```bash
@@ -17,18 +21,30 @@ cd chatbot-manual
 
 # Entorno virtual
 python -m venv venv
-venv\Scripts\activate
+venv\Scripts\activate  # Windows
+source venv/bin/activate  # Linux/Mac
 
 # Dependencias
 pip install -r requirements.txt
+```
 
-# Configurar .env
+## ⚙️ Configuración
+
+Crea un archivo `.env` en la raíz:
+```
 GROQ_API_KEY=tu_key_aqui
+```
 
-# Procesar manual
-python src/process_manual.py
+## 🚀 Uso
 
-# Ejecutar
+**1. Procesar el manual PDF:**
+```bash
+python src/process_manual.py --lang es --pdf data/manual_es.pdf
+python src/process_manual.py --lang en --pdf data/manual_en.pdf
+```
+
+**2. Ejecutar el chatbot:**
+```bash
 python src/chatbot.py
 ```
 
@@ -36,4 +52,5 @@ python src/chatbot.py
 
 - No subir `.env`
 - No subir PDFs
-- Repositorio privado
+- No subir la carpeta `faiss_index/`
+- Repositorio privado recomendado
