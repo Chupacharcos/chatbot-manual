@@ -18,28 +18,6 @@ RETRIEVAL_K       = 10
 RERANKED_K        = 3
 MAX_HISTORY       = 6
 SUPPORTED_LANGS   = ["es", "en", "ca", "pt"]
-FALLBACK_LANG     = "es"
-
-# ─── Detección simple de idioma ──────────────────────────────────────────────
-
-def simple_detect_lang(text):
-    """Detección básica por palabras clave"""
-    text_lower = text.lower()
-    
-    en_words = ['the', 'is', 'are', 'what', 'how', 'when', 'where']
-    ca_words = ['és', 'són', 'com', 'què', 'quan', 'on']
-    pt_words = ['é', 'são', 'como', 'o que', 'quando', 'onde']
-    es_words = ['es', 'son', 'cómo', 'qué', 'cuándo', 'dónde']
-    
-    scores = {
-        'en': sum(1 for w in en_words if w in text_lower),
-        'ca': sum(1 for w in ca_words if w in text_lower),
-        'pt': sum(1 for w in pt_words if w in text_lower),
-        'es': sum(1 for w in es_words if w in text_lower)
-    }
-    
-    detected = max(scores, key=scores.get)
-    return detected if scores[detected] > 0 else 'es'
 
 # ─── Tipos de pregunta ───────────────────────────────────────────────────────
 
@@ -143,47 +121,39 @@ Resposta:"""
 class RAGEngine:
     def __init__(self):
         print("🔧 Inicializando RAG Engine...")
-        
-        # Embeddings
+
         self.embeddings_model = SentenceTransformer(EMBEDDINGS_MODEL)
-        
-        # Re-ranker
+
         print("📊 Cargando re-ranker...")
         self.reranker = CrossEncoder(RERANKER_MODEL)
-        
-        # LLM
+
         self.llm = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        
-        # Índices por idioma
-        self.indices = {}
+
+        # Índices por idioma (compartidos entre todas las sesiones)
+        self.indices     = {}
         self.chunks_data = {}
-        
-        # Historial
-        self.history = []
-        
+
         print("✅ RAG Engine listo\n")
-    
+
     def _load_index(self, lang: str) -> bool:
         if lang in self.indices:
             return True
-        
-        faiss_path = os.path.join(FAISS_BASE_PATH, lang)
-        index_file = os.path.join(faiss_path, "index.faiss")
+
+        faiss_path  = os.path.join(FAISS_BASE_PATH, lang)
+        index_file  = os.path.join(faiss_path, "index.faiss")
         chunks_file = os.path.join(faiss_path, "chunks.pkl")
-        
+
         if not os.path.exists(index_file):
             return False
-        
+
         print(f"📂 Cargando índice [{lang.upper()}]...")
         self.indices[lang] = faiss.read_index(index_file)
-        
+
         with open(chunks_file, "rb") as f:
             self.chunks_data[lang] = pickle.load(f)
-        
-        return True
-    
 
-    
+        return True
+
     def _preprocess_query(self, question: str, lang: str) -> str:
         prompts = {
             "es": f"Corrige errores y reformula clara y brevemente: {question}",
@@ -201,126 +171,97 @@ class RAGEngine:
             return response.choices[0].message.content.strip()
         except Exception:
             return question
-    
+
     def _detect_question_type(self, question: str) -> str:
         q_lower = question.lower()
         for q_type, data in QUESTION_TYPES.items():
             if any(kw in q_lower for kw in data["keywords"]):
                 return q_type
         return "general"
-    
+
     def _retrieve(self, question: str, lang: str, k: int = RETRIEVAL_K):
         query_embedding = self.embeddings_model.encode([question])
         distances, indices = self.indices[lang].search(query_embedding.astype('float32'), k)
-        
+
         results = []
         for idx in indices[0]:
             if idx < len(self.chunks_data[lang]):
                 results.append(self.chunks_data[lang][idx])
-        
         return results
-    
+
     def _rerank(self, question: str, docs: list) -> list:
         if not docs:
             return docs
-        
-        pairs = [(question, doc["text"]) for doc in docs]
+        pairs  = [(question, doc["text"]) for doc in docs]
         scores = self.reranker.predict(pairs)
         ranked = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
-        
         return [doc for _, doc in ranked[:RERANKED_K]]
-    
-    def _format_history(self) -> str:
-        if not self.history:
+
+    def _format_history(self, history: list) -> str:
+        """Formatea el historial recibido como parámetro (nunca global)."""
+        if not history:
             return "Sin conversación previa."
-        
         lines = []
-        for msg in self.history[-MAX_HISTORY:]:
+        for msg in history[-MAX_HISTORY:]:
             lines.append(f"{msg['role'].capitalize()}: {msg['content']}")
         return "\n".join(lines)
-    
-    def query(self, question: str, lang: str) -> dict:
+
+    def query(self, question: str, lang: str, history: list) -> dict:
         """
-        Consulta al manual en el idioma especificado.
-        
+        Consulta el manual.
+
         Args:
             question: Pregunta del usuario
-            lang: Idioma del manual a consultar ('es', 'en', 'ca', 'pt')
+            lang:     Idioma (es, en, ca, pt)
+            history:  Historial de la sesión — gestionado externamente por api.py
         """
-        # Validar idioma
         if lang not in SUPPORTED_LANGS:
-            return {
-                "answer": f"Idioma '{lang}' no soportado. Usa: {SUPPORTED_LANGS}",
-                "lang": lang,
-                "sources": []
-            }
-        
-        print(f"🌍 Idioma seleccionado: {lang.upper()}")
-        
-        # 2. Cargar índice del idioma
+            return {"answer": f"Idioma '{lang}' no soportado.", "lang": lang, "sources": []}
+
         if not self._load_index(lang):
-            return {
-                "answer": f"No hay manual disponible para '{lang}'.",
-                "lang": lang,
-                "sources": []
-            }
-        
-        # 3. Preprocesar
+            return {"answer": f"No hay manual disponible para '{lang}'.", "lang": lang, "sources": []}
+
+        # Preprocesar
         processed = self._preprocess_query(question, lang)
         if processed != question:
             print(f"✏️  Reformulada: {processed}")
-            
-            # 4. Tipo de pregunta
-            q_type = self._detect_question_type(processed)
-            type_instr = QUESTION_TYPES.get(q_type, {}).get("instruction", "Responde claramente.")
-            print(f"📌 Tipo: {q_type}")
-            
-            # 5. Búsqueda
-            docs = self._retrieve(processed, lang, RETRIEVAL_K)
-            print(f"🔍 Recuperados: {len(docs)}")
-            
-            # 6. Re-ranking
-            reranked = self._rerank(processed, docs)
-            print(f"📊 Re-rankeados: {len(reranked)}")
-            
-            # 7. Contexto
-            context_parts = []
-            for doc in reranked:
-                section = doc.get("section", "Sin sección")
-                page = doc.get("page", "?")
-                context_parts.append(f"[Sección: {section} | Pág: {page}]\n{doc['text']}")
-            context = "\n\n---\n\n".join(context_parts)
-            
-            # 8. Generar respuesta
-            prompt_template = PROMPTS.get(lang, PROMPTS["es"])
-            prompt = prompt_template.format(
-                history=self._format_history(),
-                context=context,
-                question=processed,
-                type_instruction=type_instr
-            )
-            
-            response = self.llm.chat.completions.create(
-                model=LLM_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0
-            )
-            
-            answer = response.choices[0].message.content
-            
-            # 9. Actualizar historial
-            self.history.append({"role": "user", "content": question})
-            self.history.append({"role": "assistant", "content": answer})
-            
-            if len(self.history) > MAX_HISTORY * 2:
-                self.history = self.history[-(MAX_HISTORY * 2):]
-            
-            return {
-                "answer": answer,
-                "lang": lang,
-                "sources": reranked
-            }
-    
-    def clear_history(self):
-        self.history = []
-        print("🗑️  Historial borrado")
+
+        # Tipo de pregunta
+        q_type    = self._detect_question_type(processed)
+        type_instr = QUESTION_TYPES.get(q_type, {}).get("instruction", "Responde claramente.")
+        print(f"📌 Tipo: {q_type}")
+
+        # Búsqueda + re-ranking
+        docs     = self._retrieve(processed, lang, RETRIEVAL_K)
+        reranked = self._rerank(processed, docs)
+        print(f"🔍 Recuperados: {len(docs)} → Re-rankeados: {len(reranked)}")
+
+        # Contexto
+        context_parts = []
+        for doc in reranked:
+            section = doc.get("section", "Sin sección")
+            page    = doc.get("page", "?")
+            context_parts.append(f"[Sección: {section} | Pág: {page}]\n{doc['text']}")
+        context = "\n\n---\n\n".join(context_parts)
+
+        # Generar respuesta
+        prompt = PROMPTS.get(lang, PROMPTS["es"]).format(
+            history=self._format_history(history),
+            context=context,
+            question=processed,
+            type_instruction=type_instr
+        )
+
+        response = self.llm.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+
+        answer = response.choices[0].message.content
+
+        return {
+            "answer":  answer,
+            "lang":    lang,
+            "sources": reranked
+        }

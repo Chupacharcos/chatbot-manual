@@ -30,3 +30,9 @@ __pycache__/
 # ─── Sistema ─────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ─── Logs generados automáticamente ────────────────────
+logs/
+
+# ─── Mejoras ─────────────────────────────────────────────────
+mejoras.txt
