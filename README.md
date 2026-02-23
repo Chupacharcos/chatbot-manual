@@ -1,6 +1,6 @@
 # 🤖 Asistente Virtual IA — Chatbot RAG Multiidioma
 
-Sistema de chatbot inteligente para consultar manuales empresariales, basado en RAG (Retrieval-Augmented Generation) con búsqueda semántica y re-ranking.
+Sistema de chatbot inteligente para consultar manuales empresariales, basado en RAG (Retrieval-Augmented Generation) con búsqueda semántica, re-ranking y chunking semántico.
 
 ## 🛠️ Stack
 
@@ -21,14 +21,16 @@ Sistema de chatbot inteligente para consultar manuales empresariales, basado en 
 ```
 chatbot-manual/
 ├── src/
-│   ├── process_manual.py    # Procesa el PDF y genera el índice FAISS
+│   ├── process_manual.py    # Procesa el PDF (chunking semántico + índice FAISS)
 │   ├── rag_engine.py        # Motor RAG (búsqueda + respuesta)
 │   ├── chatbot.py           # Interfaz de línea de comandos
 │   └── api.py               # Servidor FastAPI (API REST)
 ├── data/                    # Colocar aquí los PDFs del manual
+│   └── .gitkeep
+├── logs/                    # Logs generados automáticamente
 ├── docs/
-│   └── guia_instalacion.pdf  # Guía completa de instalación
-├── .env.example             # Plantilla para configurar la API Key
+│   └── guia_instalacion.pdf # Guía completa de instalación
+├── .env.example             # Plantilla para configurar variables de entorno
 ├── .gitignore
 ├── requirements.txt
 ├── setup.sh                 # Instalación automática — ejecutar una sola vez
@@ -52,13 +54,12 @@ git clone https://github.com/Chupacharcos/chatbot-manual.git
 cd chatbot-manual
 ```
 
-**2. Configurar la API Key**
-
-Crea el archivo `.env` en la raíz del proyecto:
+**2. Configurar variables de entorno**
+```bash
+cp .env.example .env
+nano .env
 ```
-GROQ_API_KEY=gsk_tu_clave_aqui
-```
-Obtén tu clave gratuita en: https://console.groq.com
+Rellena `GROQ_API_KEY` con tu clave de https://console.groq.com
 
 **3. Colocar el PDF del manual**
 ```
@@ -72,7 +73,6 @@ data/manual_pt.pdf   ← português
 ```bash
 bash setup.sh
 ```
-El script instala dependencias, configura el servidor y procesa el manual automáticamente.
 
 **5. Arrancar el servidor**
 ```bash
@@ -83,51 +83,83 @@ bash start.sh
 
 ## 🔌 Integración en tu app web
 
-Una vez el servidor está arrancado, añade este snippet en tu HTML:
+Cada usuario tiene su propia sesión de conversación mediante `session_id`. Si la autenticación está activa, envía también la cabecera `X-API-Key`.
 
 ```javascript
-async function preguntar(pregunta) {
+let sessionId = sessionStorage.getItem('chatbot_session_id') || '';
+
+async function preguntar(pregunta, lang = 'es') {
   const res = await fetch('http://IP_DEL_SERVIDOR:8000/query', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question: pregunta, lang: 'es' })
+    method:  'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key':    'tu_client_api_key'   // si la autenticación está activa
+    },
+    body: JSON.stringify({ question: pregunta, lang, session_id: sessionId })
   });
+
   const data = await res.json();
+
+  sessionId = data.session_id;
+  sessionStorage.setItem('chatbot_session_id', sessionId);
+
   return data.answer;
 }
 ```
 
 ### Endpoints disponibles
 
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| `POST` | `/query` | Consultar el manual |
-| `DELETE` | `/history` | Borrar historial de conversación |
-| `GET` | `/docs` | Documentación Swagger interactiva |
+| Método | Endpoint | Auth | Descripción |
+|--------|----------|------|-------------|
+| `GET`    | `/`                      | No  | Estado del servidor |
+| `POST`   | `/query`                 | Sí  | Consultar el manual |
+| `GET`    | `/stats`                 | Sí  | Sesiones activas y mensajes totales |
+| `DELETE` | `/history/{session_id}`  | Sí  | Borrar historial de un usuario |
+| `DELETE` | `/history`               | Sí  | Borrar historial de todas las sesiones |
+| `GET`    | `/docs`                  | No  | Documentación Swagger interactiva |
+
+### Parámetros de `/query`
+
+| Parámetro    | Tipo   | Default | Descripción |
+|--------------|--------|---------|-------------|
+| `question`   | string | —       | Pregunta en lenguaje natural |
+| `lang`       | string | `es`    | Idioma: `es`, `en`, `ca`, `pt` |
+| `session_id` | string | `""`    | ID de sesión — vacío en la primera llamada |
+
+---
+
+## 📊 Logs
+
+Los logs se guardan automáticamente en `logs/chatbot.log`. Para verlos en tiempo real:
+
+```bash
+tail -f logs/chatbot.log
+```
+
+Formato de cada entrada:
+```
+2026-02-23 10:30:15 | INFO | QUERY | session=a1b2c3d4... | lang=es | time=1.23s | sources=[Sección 3 p.12] | q='¿Cuál es el procedimiento de auditoría?'
+```
 
 ---
 
 ## 📖 Guía de instalación completa
 
-Consulta la guía paso a paso para clientes en:
-
 📄 [`docs/guia_instalacion.pdf`](docs/guia_instalacion.pdf)
-
-Incluye instrucciones detalladas para el cliente (configuración de API Key y PDF) y para el equipo IT (instalación, puesta en marcha e integración en la app web).
 
 ---
 
 ## 🔐 Seguridad
 
-- El archivo `.env` nunca se sube al repositorio
-- Los PDFs del cliente nunca se suben al repositorio
-- En producción, configura `APP_URL` en `.env` con el dominio exacto de tu app para restringir el CORS
+- `.env` nunca se sube al repositorio
+- PDFs del cliente nunca se suben al repositorio
+- `CLIENT_API_KEY` en `.env` protege el acceso a la API
+- `APP_URL` en `.env` restringe el CORS al dominio del cliente
+- Cada usuario tiene historial aislado por `session_id`
 
 ---
 
 ## 🔄 Actualizar el manual
-
-Cuando cambie el PDF, solo hay que reprocesarlo:
 
 ```bash
 source venv/bin/activate
