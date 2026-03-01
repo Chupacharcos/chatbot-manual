@@ -13,7 +13,7 @@ load_dotenv()
 EMBEDDINGS_MODEL  = "intfloat/multilingual-e5-large"
 RERANKER_MODEL    = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 FAISS_BASE_PATH   = "./faiss_index"
-LLM_MODEL         = "llama-3.3-70b-versatile"
+LLM_MODEL         = "llama-3.1-8b-instant"
 RETRIEVAL_K       = 10
 RERANKED_K        = 3
 MAX_HISTORY       = 6
@@ -39,7 +39,7 @@ QUESTION_TYPES = {
 # ─── Prompts por idioma ──────────────────────────────────────────────────────
 
 PROMPTS = {
-    "es": """Eres un asistente experto en el manual de la empresa, especializado en ISO y gestión empresarial.
+    "es": """Eres un asistente experto en el manual de la empresa.
 
 Historial reciente:
 {history}
@@ -58,7 +58,7 @@ Instrucciones:
 
 Respuesta:""",
 
-    "en": """You are an expert assistant for the company's manual, specialized in ISO and business management.
+    "en": """You are an expert assistant for the company's manual.
 
 Recent history:
 {history}
@@ -77,7 +77,7 @@ Instructions:
 
 Answer:""",
 
-    "ca": """Ets un assistent expert en el manual de l'empresa, especialitzat en ISO i gestió empresarial.
+    "ca": """Ets un assistent expert en el manual de l'empresa.
 
 Historial recent:
 {history}
@@ -96,7 +96,7 @@ Instruccions:
 
 Resposta:""",
 
-    "pt": """Você é um assistente especialista no manual da empresa, especializado em ISO e gestão empresarial.
+    "pt": """Você é um assistente especialista no manual da empresa.
 
 Histórico recente:
 {history}
