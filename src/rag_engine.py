@@ -33,7 +33,7 @@ class RAGEngine:
 
     def query(self, question, lang, history):
         if not self._load_index(lang): 
-            return {"answer": "Lo siento, el manual en este idioma no está disponible.", "sources": []}
+            return {"answer": "Lo siento, el manual en este idioma no está disponible.", "sources": [], "lang": lang}
         
         # 1. Recuperación (Retrieval) — reducido de 10 a 5 para no superar límite de tokens
         q_emb = self.embeddings_model.encode([question])
@@ -59,4 +59,5 @@ class RAGEngine:
             temperature=0
         )
         
-        return {"answer": res.choices[0].message.content, "sources": reranked}
+        # Cambio aplicado: ahora devuelve también el idioma en la respuesta
+        return {"answer": res.choices[0].message.content, "sources": reranked, "lang": lang}
