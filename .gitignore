@@ -15,6 +15,10 @@ venv/
 start.sh
 chatbot_ejemplo.html
 
+# ─── Documentación y Guías ──────────────────────────────────
+# Ignora la guía de desinstalación para que no suba tus procesos internos
+docs/desinstalacion.pdf
+
 # ─── Python ─────────────────────────────────────────────────
 __pycache__/
 *.pyc
