@@ -3,7 +3,7 @@
 #  ASISTENTE VIRTUAL IA · Instalador Integral (Producción)
 # ─────────────────────────────────────────────────────────────────────────────
 set -e
-BOLD='\033[1m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; NC='\033[0m'
+BOLD='\033[1m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
 clear
 echo -e "${BLUE}${BOLD}══════════════════════════════════════════════════${NC}"
@@ -32,18 +32,32 @@ else
     echo -e "\n${YELLOW}   ⚠️  El archivo .env ya existe. Saltando configuración.${NC}"
 fi
 
-# 3. Procesar Manuales PDF
-echo -e "\n${CYAN}─── 3. Procesando manuales en data/...${NC}"
-mkdir -p data logs
+# 3. Crear carpetas necesarias
+echo -e "\n${CYAN}─── 3. Creando estructura de carpetas...${NC}"
+mkdir -p data logs faiss_index
+echo -e "${GREEN}   ✅ Carpetas listas (data/, logs/, faiss_index/).${NC}"
+
+# 4. Procesar Manuales PDF
+echo -e "\n${CYAN}─── 4. Procesando manuales en data/...${NC}"
+PROCESSED=0
 for lang in es en ca pt; do
     if [ -f "data/manual_$lang.pdf" ]; then
         echo -e "   📄 Procesando manual [$lang]..."
         python3 src/process_manual.py --lang "$lang" --pdf "data/manual_$lang.pdf"
+        PROCESSED=$((PROCESSED + 1))
     fi
 done
 
-# 4. Generar Script de Arranque
-echo -e "\n${CYAN}─── 4. Generando script de arranque (start.sh)...${NC}"
+if [ $PROCESSED -eq 0 ]; then
+    echo -e "${YELLOW}   ⚠️  No se encontró ningún PDF en data/.${NC}"
+    echo -e "   Cuando tengas los PDFs, ejecuta:"
+    echo -e "   ${CYAN}source venv/bin/activate && python3 src/process_manual.py --lang es --pdf data/manual_es.pdf${NC}"
+else
+    echo -e "${GREEN}   ✅ $PROCESSED manual(es) procesado(s).${NC}"
+fi
+
+# 5. Generar Script de Arranque
+echo -e "\n${CYAN}─── 5. Generando script de arranque (start.sh)...${NC}"
 cat > start.sh << 'EOF'
 #!/bin/bash
 source venv/bin/activate
@@ -56,10 +70,10 @@ nohup uvicorn src.api:app --host 127.0.0.1 --port $PORT > logs/api.log 2>&1 &
 echo "✅ En ejecución segura (background). Logs en logs/api.log"
 EOF
 chmod +x start.sh
+echo -e "${GREEN}   ✅ start.sh generado.${NC}"
 
-# 5. Generar Interfaz HTML (chatbot_ejemplo.html)
-echo -e "${CYAN}─── 5. Generando interfaz chatbot_ejemplo.html...${NC}"
-# Extraemos la key para meterla en el HTML automáticamente
+# 6. Generar Interfaz HTML
+echo -e "${CYAN}─── 6. Generando interfaz chatbot_ejemplo.html...${NC}"
 CK=$(grep CLIENT_API_KEY .env | cut -d'=' -f2)
 
 cat > chatbot_ejemplo.html << EOF
@@ -92,21 +106,22 @@ cat > chatbot_ejemplo.html << EOF
   <div class="chat-header">🤖 Asistente Virtual IA</div>
   <div class="messages" id="box"><div class="msg bot">Hola, ¿en qué puedo ayudarte hoy?</div></div>
   <div class="input-bar">
-    <select id="lang"><option value="es">ES</option><option value="en">EN</option><option value="ca">CA</option></select>
+    <select id="lang"><option value="es">ES</option><option value="en">EN</option><option value="ca">CA</option><option value="pt">PT</option></select>
     <input type="text" id="query" placeholder="Escribe tu consulta...">
     <button id="btn">Enviar</button>
   </div>
 </div>
 <script>
-  const API_KEY = "$CK"; 
+  const API_KEY  = "$CK";
   const API_PATH = "/proyecto/chatbot-manual/api/query";
-  const box = document.getElementById('box');
+  const box   = document.getElementById('box');
   const query = document.getElementById('query');
-  const btn = document.getElementById('btn');
+  const btn   = document.getElementById('btn');
+  let sessionId = sessionStorage.getItem('chatbot_session_id') || '';
 
   async function ask() {
     const text = query.value.trim();
-    if(!text) return;
+    if (!text) return;
     addMsg(text, 'user');
     query.value = '';
     btn.disabled = true;
@@ -114,12 +129,14 @@ cat > chatbot_ejemplo.html << EOF
       const r = await fetch(API_PATH, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
-        body: JSON.stringify({ question: text, lang: document.getElementById('lang').value })
+        body: JSON.stringify({ question: text, lang: document.getElementById('lang').value, session_id: sessionId })
       });
+      if (r.status === 403) { addMsg('❌ Acceso denegado. Clave de acceso incorrecta.', 'bot'); btn.disabled = false; return; }
       const d = await r.json();
+      if (d.session_id) { sessionId = d.session_id; sessionStorage.setItem('chatbot_session_id', sessionId); }
       addMsg(d.answer, 'bot', d.sources);
     } catch(e) {
-      addMsg("Error al conectar con el servidor.", 'bot');
+      addMsg('❌ Error al conectar con el servidor.', 'bot');
     }
     btn.disabled = false;
   }
@@ -128,23 +145,25 @@ cat > chatbot_ejemplo.html << EOF
     const d = document.createElement('div');
     d.className = 'msg ' + s;
     d.textContent = t;
-    if(sources.length > 0) {
+    if (sources && sources.length > 0) {
       const span = document.createElement('span');
       span.className = 'source-tag';
-      span.textContent = "📚 Referencias: " + [...new Set(sources.map(src => src.section + ' (p.' + src.page + ')'))].join(' | ');
+      span.textContent = '📚 ' + [...new Set(sources.map(src => src.section + ' (p.' + src.page + ')'))].join(' | ');
       d.appendChild(span);
     }
     box.appendChild(d);
     box.scrollTop = box.scrollHeight;
   }
+
   btn.onclick = ask;
   query.onkeypress = (e) => e.key === 'Enter' && ask();
 </script>
 </body>
 </html>
 EOF
+echo -e "${GREEN}   ✅ chatbot_ejemplo.html generado.${NC}"
 
-# 6. Resumen Final
+# 7. Resumen Final
 SERVER_IP=$(hostname -I | awk '{print $1}')
 API_PORT=$(grep API_PORT .env | cut -d'=' -f2)
 
