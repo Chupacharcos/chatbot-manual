@@ -21,8 +21,8 @@ pip install --upgrade pip --quiet
 (pip install -r requirements.txt --quiet) & 
 pid=$!
 while kill -0 $pid 2>/dev/null; do
-    echo -ne "   ${BLUE}📦 Instalando dependencias... [====|    ]${NC}\r" ; sleep 1
-    echo -ne "   ${BLUE}📦 Instalando dependencias... [========|]${NC}\r" ; sleep 1
+    echo -ne "    ${BLUE}📦 Instalando dependencias... [====|    ]${NC}\r" ; sleep 1
+    echo -ne "    ${BLUE}📦 Instalando dependencias... [========|]${NC}\r" ; sleep 1
 done
 echo -e "${GREEN}    ✅ Librerías instaladas correctamente.         ${NC}"
 
@@ -81,11 +81,12 @@ sudo systemctl enable chatbot
 sudo systemctl restart chatbot
 echo -e "${GREEN}    ✅ Servicio 'chatbot' creado y activo.${NC}"
 
-# 5. Generar Interfaz HTML Completa
+# 5. Generar Interfaz HTML Completa (USANDO ESCAPE SEGURO)
 echo -e "\n${CYAN}${BOLD}─── 5. Generando Interfaz Demo ────────────────────${NC}"
 CK=$(grep CLIENT_API_KEY .env | cut -d'=' -f2)
 
-cat > chatbot_ejemplo.html << EOF
+# Usamos 'EOF' con comillas para que bash no intente procesar los símbolos de JS
+cat > chatbot_ejemplo.html << 'EOF'
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -123,7 +124,7 @@ cat > chatbot_ejemplo.html << EOF
 </div>
 <script>
   const box = document.getElementById('box'), q = document.getElementById('q'), btn = document.getElementById('go'), lg = document.getElementById('lang');
-  const API_KEY = "$CK";
+  const API_KEY = "CK_PLACEHOLDER";
   const API_PATH = "/proyecto/chatbot-manual/api/query";
 
   async function send() {
@@ -156,6 +157,9 @@ cat > chatbot_ejemplo.html << EOF
 </body>
 </html>
 EOF
+
+# Inyectamos la API KEY real de forma segura usando sed
+sed -i "s/CK_PLACEHOLDER/$CK/" chatbot_ejemplo.html
 
 # 6. Resumen Final
 echo -e "\n${GREEN}${BOLD}══════════════════════════════════════════════════${NC}"
