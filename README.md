@@ -154,7 +154,7 @@ Autenticación: cabecera `X-API-Key: tu_client_api_key`
 **Request:**
 ```json
 {
-  "question": "¿Cuál es el procedimiento de auditoría?",
+  "question": "¿Cómo se realiza el proceso de alta de usuario?",
   "lang": "es",
   "session_id": ""
 }
@@ -169,10 +169,10 @@ Autenticación: cabecera `X-API-Key: tu_client_api_key`
 **Response:**
 ```json
 {
-  "answer": "Según el manual, el procedimiento de auditoría...",
+  "answer": "Según el manual, el proceso de alta de usuario consiste en...",
   "lang": "es",
   "sources": [
-    {"section": "3. Auditoría", "page": 12, "text": "..."}
+    {"section": "Gestión de usuarios", "page": 5, "text": "..."}
   ],
   "session_id": "a1b2c3d4-..."
 }
@@ -250,7 +250,7 @@ tail -f logs/api.log
 
 Formato de cada entrada:
 ```
-2026-03-01 10:30:15 | INFO | QUERY | session=a1b2c3d4... | lang=es | time=1.23s | sources=[Sección 3 p.12] | q='¿Cuál es el procedimiento de auditoría?'
+2026-03-01 10:30:15 | INFO | QUERY | session=a1b2c3d4... | lang=es | time=1.23s | sources=[Gestión de usuarios p.5] | q='¿Cómo se realiza el proceso de alta de usuario?'
 ```
 
 ---
