@@ -12,8 +12,12 @@ venv/
 .venv/
 
 # ─── Generados por setup.sh ─────────────────────────────────
-start.sh
+start_chatbot.sh
 chatbot_ejemplo.html
+
+# ─── PDFs y sesiones dinámicas ──────────────────────────────
+uploads/
+faiss_sessions/
 
 # ─── Documentación y Guías ──────────────────────────────────
 # Ignora la guía de desinstalación para que no suba tus procesos internos
