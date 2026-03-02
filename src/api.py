@@ -128,13 +128,11 @@ def build_faiss_index_from_pdf(pdf_path: str, lang: str = "es") -> tuple:
     sections = extract_sections(pages)
     log.info(f"✅ {len(sections)} secciones identificadas")
     
-    # 3. Crear chunks
-    chunks = create_chunks(sections, CHUNK_SIZE, CHUNK_OVERLAP)
+    # 3. Crear chunks — chunk más grande para reducir el número de embeddings
+    # a generar en CPU. CHUNK_SIZE=1000 produce ~300 chunks en un manual grande
+    # (~4.5 min de encoding); con 3000 se obtienen ~100 chunks (~1.5 min).
+    chunks = create_chunks(sections, 3000, 300)
     log.info(f"✅ {len(chunks)} chunks creados")
-
-    # El merging semántico se omite en uploads dinámicos: encodeificar 300+
-    # chunks en CPU tarda ~5 min y supera el timeout de la petición web.
-    # El chunking con solapamiento (CHUNK_OVERLAP) ya preserva el contexto.
 
     # 4. Generar embeddings
     log.info(f"🧮 Generando embeddings para {len(chunks)} chunks...")
