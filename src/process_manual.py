@@ -50,19 +50,30 @@ def extract_sections(pages_data):
     sections = []
     current_section = {"title": "Inicio", "content": "", "page": 1}
 
-    patterns = [
-        r'^\d+\.\s+[A-ZÁÉÍÓÚÑ]',
-        r'^\d+\.\d+\s+',
-        r'^Capítulo\s+\d+',
-        r'^CAPÍTULO\s+\d+',
-        r'^Chapter\s+\d+',
-        r'^CHAPTER\s+\d+',
-        r'^Capítol\s+\d+',
-        r'^Capítulo\s+\d+',
+    # Patrones explícitos: secciones numeradas y capítulos
+    explicit_patterns = [
+        r'^\d+\.\s+[A-ZÁÉÍÓÚÑ]',       # "1. Título"
+        r'^\d+\.\d+\s+',                # "1.1 Subtítulo"
+        r'^(Capítulo|CAPÍTULO|Capítol)\s+\d+',
+        r'^(Chapter|CHAPTER)\s+\d+',
+        r'^(Sección|SECCIÓN|Section|SECTION)\s+\d+',
+        r'^(Anexo|ANEXO|Annex)\s+',
+        r'^¿.{5,70}\?$',               # Pregunta como cabecera: "¿Qué es...?"
     ]
 
+    # Palabras que indican claramente una cabecera temática
+    header_keywords = re.compile(
+        r'^(Introducción|Introduction|Conclusi|Objetivos|Objetivo|'
+        r'Descripción|Overview|Summary|Resumen|Requisitos|Requirements|'
+        r'Instalación|Installation|Configuración|Configuration|'
+        r'Funcionalidades|Features|Características|Uso|Usage|'
+        r'Integración|Integration|Seguridad|Security|'
+        r'Contacto|Contact|Soporte|Support|Preguntas)',
+        re.IGNORECASE
+    )
+
     for page_data in pages_data:
-        lines   = page_data["text"].split('\n')
+        lines    = page_data["text"].split('\n')
         page_num = page_data["page"]
 
         for line in lines:
@@ -70,7 +81,26 @@ def extract_sections(pages_data):
             if not line:
                 continue
 
-            is_section = any(re.match(p, line) for p in patterns) and len(line) < 100
+            is_section = False
+
+            # 1. Coincide con patrón explícito
+            if any(re.match(p, line) for p in explicit_patterns) and len(line) < 100:
+                is_section = True
+
+            # 2. Línea corta que parece título:
+            #    - entre 4 y 80 chars
+            #    - no termina en puntuación de frase (. , ; :)
+            #    - empieza en mayúscula o es todo mayúsculas
+            #    - no es solo números/símbolos
+            elif (4 <= len(line) <= 80
+                  and not re.search(r'[.,;:]$', line)
+                  and re.match(r'^[A-ZÁÉÍÓÚÑ¿]', line)
+                  and re.search(r'[a-záéíóúñA-ZÁÉÍÓÚÑ]{3,}', line)
+                  and (line.isupper() or header_keywords.match(line)
+                       or re.match(r'^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]', line))):
+                # Evitar líneas que son claramente contenido (más de 8 palabras)
+                if len(line.split()) <= 8:
+                    is_section = True
 
             if is_section:
                 if current_section["content"].strip():

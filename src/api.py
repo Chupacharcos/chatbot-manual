@@ -128,11 +128,18 @@ def build_faiss_index_from_pdf(pdf_path: str, lang: str = "es") -> tuple:
     sections = extract_sections(pages)
     log.info(f"✅ {len(sections)} secciones identificadas")
     
-    # 3. Crear chunks — chunk más grande para reducir el número de embeddings
-    # a generar en CPU. CHUNK_SIZE=1000 produce ~300 chunks en un manual grande
-    # (~4.5 min de encoding); con 3000 se obtienen ~100 chunks (~1.5 min).
-    chunks = create_chunks(sections, 3000, 300)
-    log.info(f"✅ {len(chunks)} chunks creados")
+    # 3. Crear chunks con tamaño adaptativo según volumen del documento.
+    # Objetivo: max ~80 chunks para que el encoding en CPU tarde <90s.
+    total_chars = sum(len(s["content"]) for s in sections)
+    if total_chars < 15000:       # PDF corto (<15 págs aprox)
+        dyn_chunk, dyn_overlap = 1000, 150
+    elif total_chars < 60000:     # PDF mediano
+        dyn_chunk, dyn_overlap = 2000, 200
+    else:                         # PDF grande (>60 págs aprox)
+        dyn_chunk, dyn_overlap = 3000, 300
+
+    chunks = create_chunks(sections, dyn_chunk, dyn_overlap)
+    log.info(f"✅ {len(chunks)} chunks creados (chunk_size={dyn_chunk})")
 
     # 4. Generar embeddings
     log.info(f"🧮 Generando embeddings para {len(chunks)} chunks...")
