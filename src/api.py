@@ -159,7 +159,7 @@ def query_session_index(
     session_id: str,
     question: str,
     lang: str = "es",
-    top_k: int = 3
+    top_k: int = 5
 ) -> dict:
     """
     Consulta el índice FAISS de una sesión específica.
@@ -298,15 +298,28 @@ def query(request: QueryRequest):
         log.info(f"🔍 Usando índice dinámico para sesión {session_id[:8]}...")
         
         try:
-            rag_result = query_session_index(session_id, request.question, request.lang)
+            # Reformular query si el mensaje es muy corto y hay historial.
+            # Mensajes como "no, todos", "sí", "¿y el punto 3?" dependen
+            # del contexto previo — sin reformulación FAISS no encuentra nada.
+            search_query = request.question
+            if len(request.question.split()) <= 5 and history:
+                last_user = next(
+                    (h["content"] for h in reversed(history) if h["role"] == "user"),
+                    ""
+                )
+                if last_user:
+                    search_query = f"{last_user} {request.question}"
+                    log.info(f"🔄 Query reformulada: {search_query[:80]!r}")
+
+            rag_result = query_session_index(session_id, search_query, request.lang)
             relevant_chunks = rag_result["relevant_chunks"]
-            
+
             # Construir contexto
             context = "\n\n".join([
                 f"[{c['section']} - p.{c['page']}]\n{c['text']}"
                 for c in relevant_chunks
             ])
-            
+
             # Usar RAG engine para generar respuesta
             result = rag.query_with_context(
                 question=request.question,

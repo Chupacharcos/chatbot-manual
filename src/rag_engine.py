@@ -116,15 +116,16 @@ class RAGEngine:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         system_prompt = f"""Eres un asistente inteligente especializado en análisis de documentos.
 Responde siempre en {self.lang_map.get(detected_lang, 'español')}.
-Timestamp actual: {timestamp}
 
 Analiza el contexto proporcionado y responde preguntas basándote ÚNICAMENTE en la información contenida.
 
 Reglas:
-1. Si la respuesta no está en el contexto, di claramente "No encontré información sobre esto en el documento"
-2. Cita siempre la sección del documento de donde extraes la información
-3. Sé conciso pero completo
-4. Usa un tono profesional y amable"""
+1. El contexto son fragmentos seleccionados del documento por relevancia semántica, no el documento completo.
+2. Si la información pedida no aparece en los fragmentos, di: "No tengo ese fragmento disponible. Intenta preguntar de forma más específica."
+3. Nunca inventes ni supongas información que no esté en el contexto.
+4. Cita siempre la sección y página de donde extraes la información.
+5. Sé conciso pero completo. Usa tono profesional.
+6. Si el usuario pide un listado completo (todos los capítulos, todos los puntos, etc.), responde con lo que encuentres en los fragmentos disponibles y aclara que el listado puede estar incompleto."""
 
         # Construir mensajes incluyendo historial
         messages = [{"role": "system", "content": system_prompt}]
