@@ -97,7 +97,7 @@ El script hace todo automáticamente:
 3. **Configura el archivo `.env`** de forma interactiva:
    - `GROQ_API_KEY` — clave de https://console.groq.com **(obligatoria)**
    - `CLIENT_API_KEY` — contraseña de acceso a la API
-   - Puerto del servidor (por defecto: `8000`)
+   - Puerto del servidor (por defecto: `8088`)
 
 4. **Procesa los PDFs** y genera los índices FAISS (solo modo producción)
 
@@ -235,7 +235,7 @@ Referencia completa de `.env`:
 |------------------|-------------|------------------------------------------------------|
 | `GROQ_API_KEY`   | **Sí**      | Clave API de https://console.groq.com                |
 | `CLIENT_API_KEY` | Recomendada | Contraseña de acceso a la API (dejar vacío = sin auth) |
-| `API_PORT`       | No          | Puerto del servidor (default: `8000`)                |
+| `API_PORT`       | No          | Puerto del servidor (default: `8088`)                |
 | `APP_URL`        | No          | Origen CORS permitido (default: `*` = todos)         |
 
 ---

@@ -108,7 +108,7 @@ Si no existe `.env`, el instalador lo crea de forma interactiva:
 |----------|-------------|---------|
 | `GROQ_API_KEY` | **Obligatoria.** Clave de Groq | `gsk_XXXX...` |
 | `CLIENT_API_KEY` | Contraseña de acceso a la API | `mi_clave_segura` |
-| `API_PORT` | Puerto del servidor | `8000` |
+| `API_PORT` | Puerto del servidor | `8088` |
 | `APP_URL` | Origen CORS permitido | `*` o `https://tudominio.com` |
 
 > **Seguridad**: En producción establece `APP_URL` al dominio exacto del cliente, no uses `*`.

@@ -56,8 +56,8 @@ if [ ! -f ".env" ]; then
     read -p "    👉 GROQ_API_KEY: " GROQ_KEY
     read -p "    👉 OPENAI_API_KEY (opcional): " OPENAI_KEY
     read -p "    👉 CLIENT_API_KEY (seguridad): " CLIENT_KEY
-    read -p "    👉 Puerto deseado [8000]: " SELECTED_PORT
-    SELECTED_PORT=${SELECTED_PORT:-8000}
+    read -p "    👉 Puerto deseado [8088]: " SELECTED_PORT
+    SELECTED_PORT=${SELECTED_PORT:-8088}
 
     cat > .env << EOF
 GROQ_API_KEY=$GROQ_KEY
@@ -288,7 +288,7 @@ if [ "$INSTALL_MODE" = "1" ]; then
     const langSelect = document.getElementById('language');
     
     const API_KEY = "WILL_BE_REPLACED";
-    const API_URL = "http://127.0.0.1:8000/query";
+    const API_URL = "http://127.0.0.1:WILL_BE_PORT/query";
 
     async function sendMessage() {
         const text = inputField.value.trim();
@@ -346,6 +346,7 @@ if [ "$INSTALL_MODE" = "1" ]; then
 </html>
 EOF_STATIC
     sed -i "s/WILL_BE_REPLACED/$CK/" chatbot_ejemplo.html
+    sed -i "s/WILL_BE_PORT/$SELECTED_PORT/" chatbot_ejemplo.html
     
 else
     # VERSIÓN DESARROLLO: Con soporte para PDFs dinámicos
@@ -521,7 +522,7 @@ else
     const filenameSpan = document.getElementById('filename');
     
     const API_KEY = "WILL_BE_REPLACED";
-    const API_BASE = "http://127.0.0.1:8000";
+    const API_BASE = "http://127.0.0.1:WILL_BE_PORT";
     
     let sessionId = null;
 
@@ -646,6 +647,7 @@ else
 </html>
 EOF_DYNAMIC
     sed -i "s/WILL_BE_REPLACED/$CK/" chatbot_ejemplo.html
+    sed -i "s/WILL_BE_PORT/$SELECTED_PORT/" chatbot_ejemplo.html
 fi
 
 echo -e "${GREEN}    ✅ HTML de demostración creado.${NC}"
