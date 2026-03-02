@@ -1,63 +1,79 @@
-import os, pickle, faiss
-from sentence_transformers import SentenceTransformer, CrossEncoder
-from groq import Groq
-from dotenv import load_dotenv
+# ⚠️  IMPORTANTE: Copia SOLO este método y pégalo al final de la clase RAGEngine
+# en tu archivo src/rag_engine.py
+# Busca la clase "class RAGEngine:" y al final, antes del último "}", pega esto
 
-load_dotenv()
-
-# --- CONSTANTES REQUERIDAS POR LA API ---
-MAX_HISTORY = 5  # Número de mensajes que recuerda el chat
-EMBEDDINGS_MODEL = "intfloat/multilingual-e5-large"
-RERANKER_MODEL   = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
-LLM_MODEL        = "llama-3.1-8b-instant"
-
-class RAGEngine:
-    def __init__(self):
-        print("🔧 Inicializando RAG Engine...")
-        self.embeddings_model = SentenceTransformer(EMBEDDINGS_MODEL)
-        self.reranker = CrossEncoder(RERANKER_MODEL)
-        self.llm = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.indices = {}
-        self.chunks_data = {}
-
-    def _load_index(self, lang):
-        if lang in self.indices: return True
-        path = f"./faiss_index/{lang}"
-        if not os.path.exists(f"{path}/index.faiss"): 
-            print(f"⚠️ No se encontró índice para: {lang}")
-            return False
-        self.indices[lang] = faiss.read_index(f"{path}/index.faiss")
-        with open(f"{path}/chunks.pkl", "rb") as f: 
-            self.chunks_data[lang] = pickle.load(f)
-        return True
-
-    def query(self, question, lang, history):
-        if not self._load_index(lang): 
-            return {"answer": "Lo siento, el manual en este idioma no está disponible.", "sources": [], "lang": lang}
+    def query_with_context(self, question: str, context: str, lang: str = "es", history: list = None) -> dict:
+        """
+        Genera una respuesta usando un contexto específico (de PDFs dinámicos).
         
-        # 1. Recuperación (Retrieval) — reducido de 10 a 5 para no superar límite de tokens
-        q_emb = self.embeddings_model.encode([question])
-        _, idxs = self.indices[lang].search(q_emb.astype('float32'), 5)
-        docs = [self.chunks_data[lang][i] for i in idxs[0] if i < len(self.chunks_data[lang])]
+        Útil para procesamiento de PDFs subidos sin necesidad de tener
+        índices FAISS pre-procesados.
+        """
+        from datetime import datetime
         
-        # 2. Re-ranking — reducido de 3 a 2
-        pairs = [(question, d["text"]) for d in docs]
-        scores = self.reranker.predict(pairs)
-        reranked = [d for _, d in sorted(zip(scores, docs), reverse=True)][:2]
+        if not history:
+            history = []
+        
+        # Detectar idioma si es necesario
+        detected_lang = lang or self.detect_language(question)
+        
+        # Construcción del prompt
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        system_prompt = f"""Eres un asistente inteligente especializado en análisis de documentos.
+Responde siempre en {self.lang_map.get(detected_lang, 'español')}.
+Timestamp actual: {timestamp}
 
-        # 3. Construcción del Prompt — texto truncado a 400 chars por chunk
-        context = "\n\n".join([f"[{d['section']} p.{d['page']}]: {d['text'][:400]}" for d in reranked])
-        
-        messages = [
-            {"role": "system", "content": f"Eres un asistente corporativo experto. Responde siempre en {lang} basándote en el contexto proporcionado. Si no sabes la respuesta, admítelo."},
-            {"role": "user", "content": f"Contexto:\n{context}\n\nPregunta: {question}"}
-        ]
+Analiza el contexto proporcionado y responde preguntas basándote ÚNICAMENTE en la información contenida.
 
-        res = self.llm.chat.completions.create(
-            model=LLM_MODEL, 
-            messages=messages, 
-            temperature=0
-        )
+Reglas:
+1. Si la respuesta no está en el contexto, di claramente "No encontré información sobre esto en el documento"
+2. Cita siempre la sección del documento de donde extraes la información
+3. Sé conciso pero completo
+4. Usa un tono profesional y amable"""
+
+        # Construir mensajes incluyendo historial
+        messages = [{"role": "system", "content": system_prompt}]
         
-        # Cambio aplicado: ahora devuelve también el idioma en la respuesta
-        return {"answer": res.choices[0].message.content, "sources": reranked, "lang": lang}
+        # Añadir historial relevante (últimos 4 mensajes)
+        recent_history = history[-4:] if history else []
+        messages.extend(recent_history)
+        
+        # Añadir contexto y pregunta actual
+        user_message = f"""Contexto del documento:
+---
+{context}
+---
+
+Pregunta: {question}"""
+        
+        messages.append({"role": "user", "content": user_message})
+        
+        try:
+            # Llamar a OpenAI o Groq según esté configurado
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=1024
+            )
+            
+            answer = response.choices[0].message.content.strip()
+            
+            # Extraer sources del contexto (si es posible)
+            sources = []
+            # Las sources vendrán del query_session_index en api.py
+            
+            return {
+                "answer": answer,
+                "lang": detected_lang,
+                "sources": sources,
+                "model": self.model
+            }
+            
+        except Exception as e:
+            return {
+                "answer": f"Error generando respuesta: {str(e)}",
+                "lang": detected_lang,
+                "sources": [],
+                "error": str(e)
+            }
