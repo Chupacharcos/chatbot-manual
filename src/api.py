@@ -24,11 +24,9 @@ from process_manual import (
     extract_text_from_pdf,
     extract_sections,
     create_chunks,
-    merge_semantic_chunks,
     EMBEDDINGS_MODEL,
     CHUNK_SIZE,
     CHUNK_OVERLAP,
-    SEMANTIC_THRESHOLD
 )
 
 load_dotenv()
@@ -133,12 +131,12 @@ def build_faiss_index_from_pdf(pdf_path: str, lang: str = "es") -> tuple:
     # 3. Crear chunks
     chunks = create_chunks(sections, CHUNK_SIZE, CHUNK_OVERLAP)
     log.info(f"✅ {len(chunks)} chunks creados")
-    
-    # 4. Chunking semántico
-    chunks = merge_semantic_chunks(chunks, embedding_model, SEMANTIC_THRESHOLD)
-    log.info(f"✅ Chunks semánticamente optimizados: {len(chunks)}")
-    
-    # 5. Generar embeddings
+
+    # El merging semántico se omite en uploads dinámicos: encodeificar 300+
+    # chunks en CPU tarda ~5 min y supera el timeout de la petición web.
+    # El chunking con solapamiento (CHUNK_OVERLAP) ya preserva el contexto.
+
+    # 4. Generar embeddings
     log.info(f"🧮 Generando embeddings para {len(chunks)} chunks...")
     texts = [c["text"] for c in chunks]
     embeddings = embedding_model.encode(texts, show_progress_bar=False)

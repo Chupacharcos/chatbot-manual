@@ -18,9 +18,11 @@ SUPPORTED_LANGS  = ["es", "en", "ca", "pt"]
 CHUNK_SIZE    = 1000
 CHUNK_OVERLAP = 200
 
-# Umbral de similitud para fusionar chunks relacionados (0-1)
-# Cuanto más alto, más estricto — solo fusiona chunks muy similares
-SEMANTIC_THRESHOLD = 0.75
+# Umbral de similitud para fusionar chunks consecutivos (0-1)
+# Con normalize_embeddings=True el dot product es cosine similarity.
+# Chunks del mismo manual suelen tener similitud ~0.85-0.92; usar 0.95+
+# para fusionar solo contenido casi idéntico (ej. listas partidas en dos).
+SEMANTIC_THRESHOLD = 0.95
 
 # ─── Extracción ───────────────────────────────────────────────────────────────
 
