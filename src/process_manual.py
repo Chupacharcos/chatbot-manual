@@ -112,6 +112,14 @@ def extract_sections(pages_data):
     if current_section["content"].strip():
         sections.append(current_section)
 
+    # Filtrar secciones con contenido casi vacío.
+    # Los índices/TOC generan cientos de "secciones" que solo contienen
+    # el número de página de referencia (ej: "9 1.1. ") — son inútiles
+    # para RAG y contaminan el índice con chunks sin información real.
+    # Un umbral de 50 chars elimina estas entradas de TOC (que tienen
+    # 3-30 chars) sin afectar secciones reales (que tienen 50+ chars).
+    sections = [s for s in sections if len(s["content"].strip()) >= 50]
+
     return sections
 
 # ─── Chunking ─────────────────────────────────────────────────────────────────
