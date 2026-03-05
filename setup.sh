@@ -465,18 +465,18 @@ cat > chatbot_widget.html << 'EOF_WIDGET'
 <style>
   #_cw_btn{position:fixed;bottom:0;right:24px;width:240px;height:44px;background:#1F4E79;color:#fff;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:14px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;cursor:pointer;box-shadow:0 -2px 12px rgba(0,0,0,.2);z-index:9998;user-select:none;border:none;transition:background .2s}
   #_cw_btn:hover{background:#1a3f62}
-  #_cw_box{position:fixed;bottom:44px;right:24px;width:360px;max-height:520px;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 8px 32px rgba(0,0,0,.2);display:none;flex-direction:column;z-index:9999;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px}
-  #_cw_hdr{background:#1F4E79;color:#fff;padding:13px 15px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px}
+  #_cw_box{position:fixed;bottom:44px;right:24px;width:360px;height:350px;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 8px 32px rgba(0,0,0,.2);display:none;flex-direction:column;z-index:9999;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px}
+  #_cw_hdr{background:#1F4E79;color:#fff;padding:13px 15px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px;flex-shrink:0}
   #_cw_hdr>div{display:flex;gap:8px;align-items:center}
   #_cw_lang{background:rgba(255,255,255,.9);color:#1F4E79;border:none;padding:3px 6px;border-radius:6px;cursor:pointer;font-size:12px;outline:none;font-weight:600}
   #_cw_close{background:none;border:none;color:rgba(255,255,255,.8);font-size:18px;cursor:pointer;padding:0 2px;line-height:1;transition:color .2s}
   #_cw_close:hover{color:#fff}
-  #_cw_msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px;min-height:100px;max-height:370px;scroll-behavior:smooth}
+  #_cw_msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px;scroll-behavior:smooth}
   .cw-b,.cw-u{max-width:84%;padding:9px 13px;border-radius:12px;word-wrap:break-word;line-height:1.5;white-space:pre-wrap}
   .cw-b{background:#f0f4f8;color:#2d3748;align-self:flex-start;border-bottom-left-radius:3px}
   .cw-u{background:#1F4E79;color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
   .cw-typing{color:#aaa;font-style:italic;font-size:13px;align-self:flex-start;padding:6px 12px}
-  #_cw_foot{padding:11px;border-top:1px solid #eee;display:flex;gap:8px;align-items:center}
+  #_cw_foot{padding:11px;border-top:1px solid #eee;display:flex;gap:8px;align-items:center;flex-shrink:0}
   #_cw_inp{flex:1;padding:9px 13px;border:1px solid #ddd;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s}
   #_cw_inp:focus{border-color:#1F4E79}
   #_cw_inp:disabled{background:#f5f5f5;cursor:not-allowed}
@@ -583,20 +583,20 @@ cat > chatbot_widget.html << 'EOF_WIDGET_DYN'
 <style>
   #_cw_btn{position:fixed;bottom:0;right:24px;width:240px;height:44px;background:#1F4E79;color:#fff;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:14px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;cursor:pointer;box-shadow:0 -2px 12px rgba(0,0,0,.2);z-index:9998;user-select:none;border:none;transition:background .2s}
   #_cw_btn:hover{background:#1a3f62}
-  #_cw_box{position:fixed;bottom:44px;right:24px;width:360px;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 8px 32px rgba(0,0,0,.2);display:none;flex-direction:column;z-index:9999;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px}
-  #_cw_hdr{background:#1F4E79;color:#fff;padding:13px 15px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px}
+  #_cw_box{position:fixed;bottom:44px;right:24px;width:360px;height:350px;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 8px 32px rgba(0,0,0,.2);display:none;flex-direction:column;z-index:9999;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px}
+  #_cw_hdr{background:#1F4E79;color:#fff;padding:13px 15px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px;flex-shrink:0}
   #_cw_close{background:none;border:none;color:rgba(255,255,255,.8);font-size:18px;cursor:pointer;padding:0 2px;line-height:1;transition:color .2s}
   #_cw_close:hover{color:#fff}
   #_cw_upload_area{padding:20px}
   #_cw_drop{border:2px dashed #1F4E79;border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:background .2s;font-size:15px;color:#555}
   #_cw_drop:hover{background:#f0f4f8}
   #_cw_drop div:first-child{font-size:38px;margin-bottom:8px}
-  #_cw_msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px;max-height:300px;scroll-behavior:smooth}
+  #_cw_msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px;scroll-behavior:smooth}
   .cw-b,.cw-u{max-width:84%;padding:9px 13px;border-radius:12px;word-wrap:break-word;line-height:1.5;white-space:pre-wrap}
   .cw-b{background:#f0f4f8;color:#2d3748;align-self:flex-start;border-bottom-left-radius:3px}
   .cw-u{background:#1F4E79;color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
   .cw-typing{color:#aaa;font-style:italic;font-size:13px;align-self:flex-start;padding:6px 12px}
-  #_cw_foot{padding:11px;border-top:1px solid #eee;display:flex;gap:8px;align-items:center}
+  #_cw_foot{padding:11px;border-top:1px solid #eee;display:flex;gap:8px;align-items:center;flex-shrink:0}
   #_cw_inp{flex:1;padding:9px 13px;border:1px solid #ddd;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s}
   #_cw_inp:focus{border-color:#1F4E79}
   #_cw_inp:disabled{background:#f5f5f5;cursor:not-allowed}
