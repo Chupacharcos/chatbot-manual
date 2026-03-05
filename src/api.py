@@ -5,6 +5,7 @@ import logging
 import time
 import pickle
 import shutil
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -128,15 +129,15 @@ def build_faiss_index_from_pdf(pdf_path: str, lang: str = "es") -> tuple:
     sections = extract_sections(pages)
     log.info(f"✅ {len(sections)} secciones identificadas")
     
-    # 3. Crear chunks con tamaño adaptativo según volumen del documento.
-    # Objetivo: max ~80 chunks para que el encoding en CPU tarde <90s.
+    # 3. Crear chunks con tamaño adaptativo.
+    # Chunks más pequeños = mejor precisión FAISS + menos contenido descartado en contexto.
     total_chars = sum(len(s["content"]) for s in sections)
     if total_chars < 15000:       # PDF corto (<15 págs aprox)
-        dyn_chunk, dyn_overlap = 1000, 150
+        dyn_chunk, dyn_overlap = 700, 80
     elif total_chars < 60000:     # PDF mediano
-        dyn_chunk, dyn_overlap = 2000, 200
+        dyn_chunk, dyn_overlap = 1000, 120
     else:                         # PDF grande (>60 págs aprox)
-        dyn_chunk, dyn_overlap = 3000, 300
+        dyn_chunk, dyn_overlap = 1200, 150
 
     chunks = create_chunks(sections, dyn_chunk, dyn_overlap)
     log.info(f"✅ {len(chunks)} chunks creados (chunk_size={dyn_chunk})")
@@ -159,7 +160,7 @@ def query_session_index(
     session_id: str,
     question: str,
     lang: str = "es",
-    top_k: int = 5
+    top_k: int = 8
 ) -> dict:
     """
     Consulta el índice FAISS de una sesión específica.
@@ -185,11 +186,46 @@ def query_session_index(
     
     # Extraer chunks relevantes
     relevant_chunks = [chunks[i] for i in indices[0] if i < len(chunks)]
-    
+
     return {
         "relevant_chunks": relevant_chunks,
         "distances": distances[0].tolist()
     }
+
+
+def _normalize(text: str) -> str:
+    """Elimina acentos y pasa a minúsculas para comparación robusta."""
+    return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii').lower()
+
+
+def keyword_search_chunks(chunks: list, query: str, top_k: int = 5) -> list:
+    """
+    Búsqueda por palabras clave como complemento al FAISS semántico.
+    Normaliza acentos para que "organizacion" encuentre "organización".
+    """
+    stopwords = {
+        "como", "una", "unos", "unas", "los", "las", "que", "del", "con",
+        "por", "para", "en", "de", "la", "el", "un", "es", "se", "al",
+        "mas", "pero", "hay", "tambien", "dime", "que", "sobre", "cual",
+    }
+    query_words = [
+        _normalize(w).strip("¿?.,;:!¡")
+        for w in query.split()
+        if len(w) > 3 and _normalize(w) not in stopwords
+    ]
+    if not query_words:
+        return []
+
+    scored = []
+    for chunk in chunks:
+        text_norm = _normalize(chunk["text"])
+        matches = sum(1 for w in query_words if w in text_norm)
+        if matches > 0:
+            scored.append((matches, chunk))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [chunk for _, chunk in scored[:top_k]]
+
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
@@ -206,7 +242,8 @@ def root():
 async def upload_pdf(
     pdf: UploadFile = File(...),
     session_id: str = Form(default=""),
-    lang: str = Form(default="es")
+    lang: str = Form(default="es"),
+    persona: str = Form(default=""),
 ):
     """
     Endpoint para subir un PDF y crear una sesión de chatbot.
@@ -246,6 +283,7 @@ async def upload_pdf(
             "chunks": chunks,
             "embeddings": embeddings,
             "lang": lang,
+            "persona": persona,
             "created_at": datetime.now().isoformat()
         }
         
@@ -312,11 +350,28 @@ def query(request: QueryRequest):
                     log.info(f"🔄 Query reformulada: {search_query[:80]!r}")
 
             rag_result = query_session_index(session_id, search_query, request.lang)
-            relevant_chunks = rag_result["relevant_chunks"]
+            semantic_chunks = rag_result["relevant_chunks"]
 
-            # Construir contexto
+            # Búsqueda por palabras clave para capturar lo que el embedding pierde
+            kw_chunks = keyword_search_chunks(
+                sessions[session_id]["chunks"], search_query
+            )
+
+            # Fusionar: semántico primero, luego keyword sin duplicados.
+            # Clave = primeros 80 chars del texto (más fiable que section+page con chunks solapados)
+            seen_keys = {c["text"][:80] for c in semantic_chunks}
+            for c in kw_chunks:
+                key = c["text"][:80]
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    semantic_chunks.append(c)
+
+            relevant_chunks = semantic_chunks[:10]  # máximo 10 chunks
+            log.info(f"🔍 Chunks para contexto: {len(relevant_chunks)} (semántico+keyword)")
+
+            # Construir contexto (1000 chars/chunk — alineado con nuevo chunk_size máx de 1200)
             context = "\n\n".join([
-                f"[{c['section']} - p.{c['page']}]\n{c['text']}"
+                f"[{c['section']} - p.{c['page']}]\n{c['text'][:1000]}"
                 for c in relevant_chunks
             ])
 
@@ -325,7 +380,8 @@ def query(request: QueryRequest):
                 question=request.question,
                 context=context,
                 lang=request.lang,
-                history=history
+                history=history,
+                persona=sessions[session_id].get("persona", ""),
             )
             
             result["sources"] = relevant_chunks

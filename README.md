@@ -1,19 +1,24 @@
 # Asistente Virtual IA — Chatbot RAG Multiidioma
 
-Sistema de chatbot inteligente para consultar manuales empresariales basado en RAG (Retrieval-Augmented Generation) con búsqueda semántica, re-ranking y chunking semántico.
+Sistema de chatbot inteligente para consultar documentos empresariales basado en RAG (Retrieval-Augmented Generation). Combina búsqueda semántica vectorial con búsqueda por palabras clave para garantizar que el asistente encuentre la información relevante independientemente de cómo formule la pregunta el usuario.
+
+## Características
+
+- **Búsqueda híbrida**: semántica (FAISS) + palabras clave, con normalización de acentos
+- **Multiidioma automático**: responde en el mismo idioma que use el usuario (sin configuración)
+- **Personalidad configurable**: el cliente puede definir el rol y actitud del asistente
+- **Markdown en respuestas**: formato enriquecido (listas, negritas, encabezados)
+- **Historial de conversación**: el asistente recuerda el contexto de los últimos mensajes
+- **Dos modos**: índices estáticos pre-procesados (producción) o PDFs dinámicos desde la web
 
 ## Stack tecnológico
 
 - **Python 3.11+**
-- **FAISS** — búsqueda semántica vectorial
+- **FAISS** — búsqueda vectorial semántica
 - **Sentence Transformers** (`intfloat/multilingual-e5-large`) — embeddings multiidioma
 - **Cross-Encoder** (`mmarco-mMiniLMv2-L12-H384`) — re-ranking de resultados
 - **Groq API · Llama 3.1 8B** — generación de respuestas
 - **FastAPI + Uvicorn** — API REST asíncrona
-
-## Idiomas soportados
-
-`es` Español · `en` English · `ca` Català · `pt` Português
 
 ---
 
@@ -124,8 +129,7 @@ tail -f logs/api.log               # Ver logs en tiempo real
 Para procesar un nuevo PDF sin reinstalar:
 
 ```bash
-source venv/bin/activate
-python3 src/process_manual.py --lang es --pdf data/manual_es.pdf
+./venv/bin/python3 src/process_manual.py --lang es --pdf data/manual_es.pdf
 sudo systemctl restart chatbot
 ```
 
@@ -160,19 +164,19 @@ Autenticación: cabecera `X-API-Key: tu_client_api_key`
 }
 ```
 
-| Parámetro    | Tipo   | Obligatorio | Descripción                                    |
-|--------------|--------|-------------|------------------------------------------------|
-| `question`   | string | Sí          | Pregunta en lenguaje natural                   |
-| `lang`       | string | No          | Idioma: `es`, `en`, `ca`, `pt` (default: `es`) |
-| `session_id` | string | No          | ID de sesión — vacío en la primera llamada     |
+| Parámetro    | Tipo   | Obligatorio | Descripción                                                        |
+|--------------|--------|-------------|--------------------------------------------------------------------|
+| `question`   | string | Sí          | Pregunta en lenguaje natural                                       |
+| `lang`       | string | No          | Idioma para el índice estático: `es`, `en`, `ca`, `pt` (default: `es`). En modo dinámico el idioma se detecta automáticamente de la pregunta. |
+| `session_id` | string | No          | ID de sesión — vacío en la primera llamada                         |
 
 **Response:**
 ```json
 {
-  "answer": "Según el manual, el proceso de alta de usuario consiste en...",
+  "answer": "Para crear una organización accede al menú de Administración...",
   "lang": "es",
   "sources": [
-    {"section": "Gestión de usuarios", "page": 5, "text": "..."}
+    {"section": "Gestión de organizaciones", "page": 12, "text": "..."}
   ],
   "session_id": "a1b2c3d4-..."
 }
@@ -184,11 +188,12 @@ Sube un PDF y crea una sesión de consulta dinámica (modo desarrollo).
 
 **Request:** `multipart/form-data`
 
-| Campo        | Tipo   | Descripción                            |
-|--------------|--------|----------------------------------------|
-| `pdf`        | file   | Archivo PDF                            |
-| `lang`       | string | Idioma (default: `es`)                 |
-| `session_id` | string | ID de sesión (se genera si está vacío) |
+| Campo        | Tipo   | Descripción                                                                 |
+|--------------|--------|-----------------------------------------------------------------------------|
+| `pdf`        | file   | Archivo PDF                                                                 |
+| `lang`       | string | Idioma para el índice (default: `es`). Las respuestas se auto-adaptan al idioma de cada pregunta. |
+| `session_id` | string | ID de sesión (se genera si está vacío)                                      |
+| `persona`    | string | Rol y actitud del asistente, p.ej. "Respondo de forma técnica y precisa."  |
 
 **Response:**
 ```json
@@ -196,9 +201,40 @@ Sube un PDF y crea una sesión de consulta dinámica (modo desarrollo).
   "success": true,
   "session_id": "a1b2c3d4-...",
   "message": "PDF 'manual.pdf' procesado correctamente",
-  "chunks": 45
+  "chunks": 87
 }
 ```
+
+---
+
+## Personalidad del asistente
+
+El campo `persona` en `/upload` permite configurar el comportamiento del chatbot para cada cliente:
+
+```
+"Soy el asistente de AcmeCorp, especializado en soporte técnico B2B. Respondo de forma precisa y profesional."
+```
+
+```
+"Responde siempre de forma amigable y cercana, usando un lenguaje sencillo sin tecnicismos."
+```
+
+El asistente mantiene esa actitud durante toda la sesión.
+
+---
+
+## Idiomas soportados
+
+El asistente responde automáticamente en el idioma que use el usuario en su pregunta. No requiere configuración: si el usuario escribe en inglés, responde en inglés; si escribe en español, responde en español.
+
+En modo producción (índice estático), cada idioma necesita su propio PDF procesado:
+
+| Código | Idioma    | PDF requerido         |
+|--------|-----------|-----------------------|
+| `es`   | Español   | `data/manual_es.pdf`  |
+| `en`   | English   | `data/manual_en.pdf`  |
+| `ca`   | Català    | `data/manual_ca.pdf`  |
+| `pt`   | Português | `data/manual_pt.pdf`  |
 
 ---
 
@@ -207,14 +243,14 @@ Sube un PDF y crea una sesión de consulta dinámica (modo desarrollo).
 ```javascript
 let sessionId = sessionStorage.getItem('chatbot_session_id') || '';
 
-async function preguntar(pregunta, lang = 'es') {
+async function preguntar(pregunta) {
   const res = await fetch('http://IP_SERVIDOR:PUERTO/query', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': 'tu_client_api_key'
     },
-    body: JSON.stringify({ question: pregunta, lang, session_id: sessionId })
+    body: JSON.stringify({ question: pregunta, session_id: sessionId })
   });
 
   const data = await res.json();
@@ -242,7 +278,7 @@ Referencia completa de `.env`:
 
 ## Logs
 
-Los logs se guardan en `logs/chatbot.log`. Para verlos en tiempo real:
+Los logs se guardan en `logs/api.log`. Para verlos en tiempo real:
 
 ```bash
 tail -f logs/api.log

@@ -14,6 +14,10 @@ venv/
 # ─── Generados por setup.sh ─────────────────────────────────
 start_chatbot.sh
 chatbot_ejemplo.html
+chatbot_widget.html
+
+# ─── Scripts específicos del despliegue del cliente ─────────
+scripts/
 
 # ─── PDFs y sesiones dinámicas ──────────────────────────────
 uploads/

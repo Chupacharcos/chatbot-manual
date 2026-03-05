@@ -27,3 +27,6 @@ python-multipart==0.0.6
 pydantic==2.9.0
 packaging==24.0
 tqdm==4.67.3
+
+# PDF Generation (para generar manuales desde scripts)
+fpdf2==2.8.3

@@ -1,12 +1,21 @@
 # Asistente Virtual IA — Guía de Implementación
 
-**Sistema RAG multiidioma para consulta de manuales empresariales**
+**Sistema RAG multiidioma para consulta de documentos empresariales**
 
 ---
 
 ## Introducción
 
-El Asistente Virtual IA es un sistema de chatbot basado en RAG (Retrieval-Augmented Generation) que permite a los usuarios consultar manuales en lenguaje natural. El sistema extrae información relevante del manual y genera respuestas precisas usando un modelo de lenguaje.
+El Asistente Virtual IA es un chatbot inteligente que permite a los usuarios hacer preguntas sobre documentos en lenguaje natural y obtener respuestas precisas basadas en el contenido real del documento.
+
+**¿Cómo funciona?**
+
+El sistema combina dos mecanismos de búsqueda para garantizar que siempre encuentre la información relevante:
+
+1. **Búsqueda semántica**: entiende el significado de la pregunta, no solo las palabras exactas. Si el usuario pregunta "cómo me registro", puede encontrar secciones que hablan de "alta de usuario" o "creación de cuenta".
+2. **Búsqueda por palabras clave**: complementa la semántica capturando términos específicos que a veces el modelo de embeddings pasa por alto.
+
+El asistente responde automáticamente en el idioma que use el usuario, sin necesidad de configuración.
 
 **Modos disponibles:**
 
@@ -118,13 +127,13 @@ Si no existe `.env`, el instalador lo crea de forma interactiva:
 El instalador ejecuta automáticamente:
 
 ```bash
-python3 src/process_manual.py --lang es --pdf data/manual_es.pdf
+./venv/bin/python3 src/process_manual.py --lang es --pdf data/manual_es.pdf
 ```
 
 Este proceso:
 1. Extrae el texto del PDF
 2. Identifica secciones y capítulos
-3. Genera chunks de texto (fragmentos)
+3. Genera fragmentos de texto (chunks) con tamaño adaptativo según la longitud del documento
 4. Calcula embeddings con el modelo `intfloat/multilingual-e5-large`
 5. Construye el índice FAISS y lo guarda en `faiss_index/es/`
 
@@ -157,21 +166,21 @@ Debe mostrar: `Active: active (running)`
 ### Test básico con curl
 
 ```bash
-curl http://127.0.0.1:PUERTO/
+curl http://127.0.0.1:8088/
 ```
 
 Respuesta esperada:
 ```json
-{"status": "ok", "mode": "production"}
+{"status": "ok", "message": "Asistente Virtual IA activo", "version": "2.1"}
 ```
 
 ### Test de consulta
 
 ```bash
-curl -X POST http://127.0.0.1:PUERTO/query \
+curl -X POST http://127.0.0.1:8088/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: TU_CLIENT_API_KEY" \
-  -d '{"question": "¿De qué trata el manual?", "lang": "es"}'
+  -d '{"question": "¿De qué trata el manual?"}'
 ```
 
 ---
@@ -194,10 +203,27 @@ Cuando el cliente proporcione un nuevo PDF, procesar sin reinstalar:
 
 ```bash
 cd /ruta/al/chatbot
-source venv/bin/activate
-python3 src/process_manual.py --lang es --pdf data/manual_es.pdf
+./venv/bin/python3 src/process_manual.py --lang es --pdf data/manual_es.pdf
 sudo systemctl restart chatbot
 ```
+
+Para otros idiomas, repetir cambiando `es` por el código correspondiente (`en`, `ca`, `pt`).
+
+---
+
+## Personalidad del asistente
+
+Al subir un PDF en modo Desarrollo, se puede configurar la actitud del asistente mediante el campo `persona`. Esto permite adaptar el chatbot a la marca del cliente:
+
+```
+"Soy el asistente de AcmeCorp, especializado en soporte técnico B2B. Respondo de forma precisa y profesional."
+```
+
+```
+"Eres un asistente amable y cercano. Usa un lenguaje sencillo, sin tecnicismos, y asegúrate de que el usuario entiende la respuesta."
+```
+
+El asistente mantiene esa actitud durante toda la sesión.
 
 ---
 
@@ -208,14 +234,14 @@ Ejemplo de integración JavaScript en la aplicación del cliente:
 ```javascript
 let sessionId = sessionStorage.getItem('chatbot_session_id') || '';
 
-async function preguntar(pregunta, lang = 'es') {
+async function preguntar(pregunta) {
   const res = await fetch('http://IP_SERVIDOR:PUERTO/query', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': 'CLIENT_API_KEY'
     },
-    body: JSON.stringify({ question: pregunta, lang, session_id: sessionId })
+    body: JSON.stringify({ question: pregunta, session_id: sessionId })
   });
 
   const data = await res.json();
@@ -225,6 +251,8 @@ async function preguntar(pregunta, lang = 'es') {
   return data.answer;
 }
 ```
+
+El chatbot recuerda el contexto de los últimos mensajes de la sesión, por lo que el usuario puede hacer preguntas de seguimiento sin repetir el contexto.
 
 ---
 
@@ -250,33 +278,53 @@ Autenticación: cabecera `X-API-Key: CLIENT_API_KEY`
 ```json
 {
   "question": "¿Cómo se realiza el proceso de alta?",
-  "lang": "es",
   "session_id": ""
 }
 ```
 
+| Parámetro    | Tipo   | Obligatorio | Descripción                                                        |
+|--------------|--------|-------------|--------------------------------------------------------------------|
+| `question`   | string | Sí          | Pregunta en lenguaje natural                                       |
+| `lang`       | string | No          | Solo relevante en modo estático: `es`, `en`, `ca`, `pt` (default: `es`). En modo dinámico el idioma se detecta automáticamente. |
+| `session_id` | string | No          | ID de sesión — vacío en la primera llamada                         |
+
 **Response:**
 ```json
 {
-  "answer": "Según el manual, el proceso consiste en...",
+  "answer": "Para crear una organización accede al menú de Administración...",
   "lang": "es",
   "sources": [
-    {"section": "Gestión de usuarios", "page": 5, "text": "..."}
+    {"section": "Gestión de organizaciones", "page": 12, "text": "..."}
   ],
   "session_id": "a1b2c3d4-..."
 }
 ```
 
+### POST `/upload` — Subir PDF
+
+**Request:** `multipart/form-data`
+
+| Campo        | Tipo   | Descripción                                                                 |
+|--------------|--------|-----------------------------------------------------------------------------|
+| `pdf`        | file   | Archivo PDF (máximo 50 MB)                                                  |
+| `lang`       | string | Idioma del índice (default: `es`)                                           |
+| `session_id` | string | ID de sesión (se genera automáticamente si está vacío)                      |
+| `persona`    | string | Rol y actitud del asistente (opcional)                                      |
+
 ---
 
 ## Idiomas soportados
 
-| Código | Idioma | PDF requerido |
-|--------|--------|---------------|
-| `es` | Español | `data/manual_es.pdf` |
-| `en` | English | `data/manual_en.pdf` |
-| `ca` | Català | `data/manual_ca.pdf` |
-| `pt` | Português | `data/manual_pt.pdf` |
+El asistente detecta automáticamente el idioma de cada pregunta y responde en el mismo idioma. No requiere configuración por parte del usuario.
+
+En modo producción (índice estático), cada idioma necesita su propio PDF procesado:
+
+| Código | Idioma    | PDF requerido         |
+|--------|-----------|-----------------------|
+| `es`   | Español   | `data/manual_es.pdf`  |
+| `en`   | English   | `data/manual_en.pdf`  |
+| `ca`   | Català    | `data/manual_ca.pdf`  |
+| `pt`   | Português | `data/manual_pt.pdf`  |
 
 ---
 
@@ -287,7 +335,8 @@ Autenticación: cabecera `X-API-Key: CLIENT_API_KEY`
 - `CLIENT_API_KEY` protege todos los endpoints autenticados
 - `APP_URL` restringe CORS — en producción especificar el dominio exacto
 - Cada usuario tiene historial aislado por `session_id`
+- Los PDFs subidos dinámicamente se almacenan temporalmente en `uploads/` y pueden eliminarse con `DELETE /history/{session_id}`
 
 ---
 
-*Asistente Virtual IA — Sistema RAG multiidioma*
+*Asistente Virtual IA — Sistema RAG multiidioma v2.1*

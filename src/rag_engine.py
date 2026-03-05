@@ -67,10 +67,11 @@ class RAGEngine:
 
         # 3. Construcción del Prompt — texto truncado a 400 chars por chunk
         context = "\n\n".join([f"[{d['section']} p.{d['page']}]: {d['text'][:400]}" for d in reranked])
+        lang_name = self.lang_map.get(lang, lang)
         messages = [
             {
                 "role": "system",
-                "content": f"Eres un asistente corporativo experto. Responde siempre en {lang} basándote en el contexto proporcionado. Si no sabes la respuesta, admítelo."
+                "content": f"Eres un asistente experto. Responde siempre en {lang_name} basándote en el contexto proporcionado. Si no sabes la respuesta, admítelo."
             },
             {
                 "role": "user",
@@ -90,19 +91,17 @@ class RAGEngine:
             "lang": lang
         }
 
-    def query_with_context(self, question: str, context: str, lang: str = "es", history: list = None) -> dict:
+    def query_with_context(self, question: str, context: str, lang: str = "es", history: list = None, persona: str = "") -> dict:
         """
         Genera una respuesta usando un contexto específico (de PDFs dinámicos).
-        
-        Útil para procesamiento de PDFs subidos sin necesidad de tener
-        índices FAISS pre-procesados.
-        
+
         Args:
             question: La pregunta del usuario
             context: El contexto extraído por FAISS (chunks relevantes)
             lang: Idioma de respuesta
             history: Historial de conversación
-        
+            persona: Descripción de rol/actitud del asistente (configurable por el cliente)
+
         Returns:
             dict con 'answer', 'lang', 'sources'
         """
@@ -112,20 +111,22 @@ class RAGEngine:
         # Detectar idioma
         detected_lang = lang if lang in self.lang_map else "es"
 
-        # Construcción del prompt mejorado
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        system_prompt = f"""Eres un asistente inteligente especializado en análisis de documentos.
-Responde siempre en {self.lang_map.get(detected_lang, 'español')}.
+        # Línea de personalidad personalizada
+        persona_line = f"\n\nRol y actitud: {persona.strip()}" if persona.strip() else ""
+
+        system_prompt = f"""Eres un asistente inteligente especializado en análisis de documentos.{persona_line}
+Responde SIEMPRE en el mismo idioma que use el usuario en su pregunta. Si el usuario escribe en inglés, responde en inglés. Si escribe en español, responde en español. Nunca cambies de idioma.
 
 Analiza el contexto proporcionado y responde preguntas basándote ÚNICAMENTE en la información contenida.
 
 Reglas:
 1. El contexto son fragmentos seleccionados del documento por relevancia semántica, no el documento completo.
-2. Si la información pedida no aparece en los fragmentos, di: "No tengo ese fragmento disponible. Intenta preguntar de forma más específica."
+2. Si la información pedida no aparece claramente en los fragmentos, responde con lo que encuentres relacionado e indica que puede haber más detalles en otras secciones del documento.
 3. Nunca inventes ni supongas información que no esté en el contexto.
 4. Cita siempre la sección y página de donde extraes la información.
-5. Sé conciso pero completo. Usa tono profesional.
-6. Si el usuario pide un listado completo (todos los capítulos, todos los puntos, etc.), responde con lo que encuentres en los fragmentos disponibles y aclara que el listado puede estar incompleto."""
+5. Sé conciso pero completo.
+6. Si el usuario pide un listado completo (todos los capítulos, todos los puntos, etc.), responde con lo que encuentres en los fragmentos disponibles y aclara que el listado puede estar incompleto.
+7. Nunca empieces la respuesta con frases como "Según el contexto proporcionado", "Basándome en el contexto", "En el contexto se menciona" o similares. Responde directamente al usuario."""
 
         # Construir mensajes incluyendo historial
         messages = [{"role": "system", "content": system_prompt}]
@@ -150,7 +151,7 @@ Pregunta: {question}"""
                 model=LLM_MODEL,
                 messages=messages,
                 temperature=0.3,
-                max_tokens=1024
+                max_tokens=2048
             )
 
             answer = response.choices[0].message.content.strip()
