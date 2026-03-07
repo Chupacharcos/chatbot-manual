@@ -469,6 +469,7 @@ def clear_all_history():
     return {"status": "ok", "message": f"{count} sesiones borradas"}
 
 
+
 @app.get("/stats", dependencies=[Depends(verify_api_key)])
 def stats():
     """Estadísticas del servidor."""
