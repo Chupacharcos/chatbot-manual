@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- CONSTANTES REQUERIDAS POR LA API ---
-MAX_HISTORY = 5  # Número de mensajes que recuerda el chat
+MAX_HISTORY = 4  # Número de turnos (pares user/assistant) que recuerda el chat
 EMBEDDINGS_MODEL = "intfloat/multilingual-e5-large"
 RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 LLM_MODEL = "llama-3.1-8b-instant"
@@ -72,17 +72,23 @@ class RAGEngine:
             {
                 "role": "system",
                 "content": f"Eres un asistente experto. Responde siempre en {lang_name} basándote en el contexto proporcionado. Si no sabes la respuesta, admítelo."
-            },
-            {
-                "role": "user",
-                "content": f"Contexto:\n{context}\n\nPregunta: {question}"
             }
         ]
+
+        # Incluir historial reciente para mantener coherencia conversacional
+        recent_history = history[-(MAX_HISTORY * 2):] if history else []
+        messages.extend(recent_history)
+
+        messages.append({
+            "role": "user",
+            "content": f"Contexto:\n{context}\n\nPregunta: {question}"
+        })
 
         res = self.llm.chat.completions.create(
             model=LLM_MODEL,
             messages=messages,
-            temperature=0
+            temperature=0,
+            max_tokens=1024
         )
 
         return {
@@ -131,8 +137,8 @@ Reglas:
         # Construir mensajes incluyendo historial
         messages = [{"role": "system", "content": system_prompt}]
 
-        # Añadir historial relevante (últimos 4 mensajes)
-        recent_history = history[-4:] if history else []
+        # Añadir historial relevante
+        recent_history = history[-(MAX_HISTORY * 2):] if history else []
         messages.extend(recent_history)
 
         # Añadir contexto y pregunta actual

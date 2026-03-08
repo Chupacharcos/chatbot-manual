@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI, HTTPException, Security, Depends, UploadFile, File, Form
+from datetime import timedelta
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
@@ -111,6 +112,27 @@ class UploadResponse(BaseModel):
     chunks: int = 0
 
 # ─── Funciones auxiliares ─────────────────────────────────────────────────────
+
+SESSION_TTL_HOURS = 4  # Sesiones inactivas se eliminan tras 4 horas
+
+def cleanup_expired_sessions():
+    """Elimina sesiones creadas hace más de SESSION_TTL_HOURS horas."""
+    cutoff = datetime.now() - timedelta(hours=SESSION_TTL_HOURS)
+    expired = [
+        sid for sid, s in sessions.items()
+        if datetime.fromisoformat(s.get("created_at", datetime.now().isoformat())) < cutoff
+    ]
+    for sid in expired:
+        session = sessions.pop(sid)
+        pdf_path = session.get("pdf_path")
+        if pdf_path and os.path.exists(pdf_path):
+            try:
+                os.remove(pdf_path)
+            except Exception:
+                pass
+    if expired:
+        log.info(f"🧹 Sesiones expiradas eliminadas: {len(expired)}")
+
 
 def build_faiss_index_from_pdf(pdf_path: str, lang: str = "es") -> tuple:
     """
@@ -251,6 +273,9 @@ async def upload_pdf(
     Procesa el PDF en tiempo real y crea un índice FAISS específico para esta sesión.
     """
     try:
+        # Limpiar sesiones expiradas antes de crear una nueva
+        cleanup_expired_sessions()
+
         # Validar tipo de archivo
         if not pdf.filename.endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Solo se aceptan archivos PDF")
@@ -263,11 +288,20 @@ async def upload_pdf(
         upload_dir = Path("uploads")
         upload_dir.mkdir(exist_ok=True)
         pdf_path = upload_dir / f"{session_id}.pdf"
-        
+
         log.info(f"📥 Recibiendo PDF: {pdf.filename} → {pdf_path}")
-        
+
+        content = await pdf.read()
+
+        # Validar tamaño máximo: 10 MB
+        MAX_PDF_BYTES = 10 * 1024 * 1024
+        if len(content) > MAX_PDF_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"El PDF supera el tamaño máximo permitido (10 MB). Tamaño recibido: {len(content) // (1024*1024)} MB"
+            )
+
         with open(pdf_path, "wb") as f:
-            content = await pdf.read()
             f.write(content)
         
         # Procesar PDF y crear índice FAISS
@@ -323,7 +357,8 @@ def query(request: QueryRequest):
             "history": [],
             "faiss_index": None,
             "chunks": None,
-            "lang": request.lang
+            "lang": request.lang,
+            "created_at": datetime.now().isoformat()
         }
     
     history = sessions[session_id].get("history", [])
