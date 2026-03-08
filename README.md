@@ -310,3 +310,113 @@ Formato de cada entrada:
 | Disco   | 3 GB    | 5 GB        |
 | SO      | Ubuntu 20.04+ | Ubuntu 22.04+ |
 | Python  | 3.11    | 3.12        |
+
+---
+
+## Despliegue multi-organización (SaaS)
+
+Este apartado documenta cómo distribuir el chatbot a múltiples organizaciones desde un único servidor centralizado — por ejemplo, como complemento de una plataforma SaaS donde cada organización contratante tiene una cuota de consultas diarias.
+
+### Arquitectura
+
+```
+┌─────────────────────────────────────────────┐
+│           Servidor central (SaaS)            │
+│                                              │
+│  ┌──────────────────────────────────────┐   │
+│  │  Chatbot Service (FastAPI)            │   │
+│  │                                      │   │
+│  │  FAISS index único (manuales SaaS)   │   │
+│  │  Redis → cuotas por org_id           │   │
+│  └──────────────────────────────────────┘   │
+│                                              │
+└──────────────────────────────────────────────┘
+         ▲                ▲               ▲
+    Organización A   Organización B   Organización C
+    (100 q/día)      (100 q/día)      (500 q/día)
+```
+
+El índice FAISS es **compartido** — contiene los manuales del proveedor SaaS, indexados una sola vez. No hay aislamiento de documentos por cliente porque todos consultan la misma base de conocimiento.
+
+### Cambios necesarios en el código
+
+**1. Añadir `org_id` al endpoint `/query`**
+
+```python
+class QueryRequest(BaseModel):
+    question: str
+    session_id: str = ""
+    lang: str = "es"
+    org_id: str  # ← nuevo campo obligatorio
+```
+
+**2. Middleware de cuota diaria (Redis)**
+
+```python
+import redis
+from fastapi import HTTPException
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+CUOTAS = {
+    "standard_plus": 100,   # queries/día
+    "premium":       500,
+}
+
+def check_quota(org_id: str, plan: str):
+    key = f"quota:{org_id}:{date.today()}"
+    uso = r.incr(key)
+    if uso == 1:
+        r.expire(key, 86400)  # expira a medianoche (24h)
+    limite = CUOTAS.get(plan, 100)
+    if uso > limite:
+        raise HTTPException(429, f"Cuota diaria alcanzada ({limite} consultas/día)")
+```
+
+**3. Auth por organización**
+
+En lugar de una `CLIENT_API_KEY` global, cada organización tiene su propia key que identifica el `org_id` y el `plan` contratado:
+
+```python
+ORG_KEYS = {
+    "key_org_abc123": {"org_id": "org_A", "plan": "standard_plus"},
+    "key_org_xyz789": {"org_id": "org_B", "plan": "premium"},
+}
+
+def get_org(api_key: str = Header(..., alias="X-API-Key")):
+    org = ORG_KEYS.get(api_key)
+    if not org:
+        raise HTTPException(401, "API key inválida")
+    return org
+```
+
+En producción, estas keys se almacenarían en base de datos y se generarían automáticamente al activar el complemento para cada organización.
+
+**4. Endpoint `/query` con cuota integrada**
+
+```python
+@app.post("/query")
+async def query(req: QueryRequest, org=Depends(get_org)):
+    check_quota(org["org_id"], org["plan"])
+    # ... lógica RAG normal
+```
+
+### Variables de entorno adicionales
+
+| Variable       | Descripción                                  |
+|----------------|----------------------------------------------|
+| `REDIS_URL`    | URL de Redis (default: `redis://localhost:6379`) |
+| `DEFAULT_PLAN` | Plan por defecto si no se especifica (`standard_plus`) |
+
+### Resumen del flujo
+
+1. La plataforma SaaS activa el complemento para una organización → genera una `X-API-Key` única
+2. El frontend SaaS incluye esa key en cada llamada al chatbot
+3. El chatbot valida la key, identifica la organización y verifica la cuota diaria en Redis
+4. Si hay cuota disponible, responde; si no, devuelve `HTTP 429`
+5. El contador se reinicia automáticamente cada 24 horas
+
+### Requisitos adicionales
+
+- **Redis 6+** instalado en el mismo servidor o accesible por red interna
+- La gestión de organizaciones y keys debería hacerse desde un panel de administración o directamente desde la base de datos de la plataforma SaaS
