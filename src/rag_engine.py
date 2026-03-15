@@ -60,13 +60,17 @@ class RAGEngine:
         _, idxs = self.indices[lang].search(q_emb.astype('float32'), 5)
         docs = [self.chunks_data[lang][i] for i in idxs[0] if i < len(self.chunks_data[lang])]
 
-        # 2. Re-ranking — reducido de 3 a 2
+        # 2. Re-ranking
         pairs = [(question, d["text"]) for d in docs]
         scores = self.reranker.predict(pairs)
-        reranked = [d for _, d in sorted(zip(scores, docs), reverse=True)][:2]
+        scored_docs = sorted(zip(scores, docs), reverse=True)
+        reranked = [d for _, d in scored_docs][:4]
+        reranker_scores = [float(s) for s, _ in scored_docs][:4]
+        for i, d in enumerate(reranked):
+            d["_reranker_score"] = reranker_scores[i]
 
-        # 3. Construcción del Prompt — texto truncado a 400 chars por chunk
-        context = "\n\n".join([f"[{d['section']} p.{d['page']}]: {d['text'][:400]}" for d in reranked])
+        # 3. Construcción del Prompt — texto truncado a 600 chars por chunk
+        context = "\n\n".join([f"[{d['section']} p.{d['page']}]: {d['text'][:600]}" for d in reranked])
         lang_name = self.lang_map.get(lang, lang)
         messages = [
             {
