@@ -10,15 +10,17 @@ Sistema de chatbot inteligente para consultar documentos empresariales basado en
 - **Markdown en respuestas**: formato enriquecido (listas, negritas, encabezados)
 - **Historial de conversación**: el asistente recuerda el contexto de los últimos mensajes
 - **Dos modos**: índices estáticos pre-procesados (producción) o PDFs dinámicos desde la web
+- **SaaS multi-tenant nativo**: múltiples clientes empresa con API keys independientes, planes de tokens y panel de administración REST
 
 ## Stack tecnológico
 
 - **Python 3.11+**
-- **FAISS** — búsqueda vectorial semántica
+- **FAISS** — búsqueda vectorial semántica (índices en disco y en RAM por sesión)
 - **Sentence Transformers** (`intfloat/multilingual-e5-large`) — embeddings multiidioma
 - **Cross-Encoder** (`mmarco-mMiniLMv2-L12-H384`) — re-ranking de resultados
-- **Groq API · Llama 3.1 8B** — generación de respuestas
-- **FastAPI + Uvicorn** — API REST asíncrona
+- **Groq API · Llama 3.1 8B** — generación de respuestas (sin coste de infra)
+- **FastAPI + Uvicorn** — API REST asíncrona v3.0
+- **SQLite** — base de datos SaaS embebida (clientes, planes, uso de tokens)
 
 ---
 
@@ -27,8 +29,9 @@ Sistema de chatbot inteligente para consultar documentos empresariales basado en
 ```
 chatbot/
 ├── src/
-│   ├── api.py               # Servidor FastAPI (API REST)
-│   ├── rag_engine.py        # Motor RAG (búsqueda semántica + LLM)
+│   ├── api.py               # Servidor FastAPI v3.0 (API REST + SaaS)
+│   ├── rag_engine.py        # Motor RAG (búsqueda semántica + LLM + token tracking)
+│   ├── saas.py              # Sistema multi-tenant (clientes, planes, cuotas SQLite)
 │   ├── chatbot.py           # Interfaz de línea de comandos (CLI)
 │   └── process_manual.py    # Procesamiento de PDFs e índices FAISS
 ├── data/                    # Colocar aquí los PDFs del manual
@@ -139,19 +142,29 @@ sudo systemctl restart chatbot
 
 URL base: `http://IP_DEL_SERVIDOR:PUERTO`
 
-Autenticación: cabecera `X-API-Key: tu_client_api_key`
+Autenticación de cliente: cabecera `X-API-Key: {api_key_del_cliente}`
+Autenticación de admin: cabecera `X-Admin-Secret: {admin_secret}`
 
-### Endpoints
+### Endpoints de cliente
 
-| Método   | Endpoint                  | Auth | Descripción                               |
-|----------|---------------------------|------|-------------------------------------------|
-| `GET`    | `/`                       | No   | Estado del servidor                       |
-| `POST`   | `/upload`                 | No   | Subir PDF y crear sesión dinámica         |
-| `POST`   | `/query`                  | Sí   | Consultar el manual                       |
-| `GET`    | `/stats`                  | Sí   | Sesiones activas y mensajes totales       |
-| `DELETE` | `/history/{session_id}`   | Sí   | Borrar historial de un usuario            |
-| `DELETE` | `/history`                | Sí   | Borrar historial de todas las sesiones    |
-| `GET`    | `/docs`                   | No   | Documentación Swagger interactiva         |
+| Método   | Endpoint                  | Auth          | Descripción                               |
+|----------|---------------------------|---------------|-------------------------------------------|
+| `GET`    | `/`                       | No            | Estado del servidor y versión             |
+| `POST`   | `/upload`                 | X-API-Key     | Subir PDF y crear sesión dinámica         |
+| `POST`   | `/query`                  | X-API-Key     | Consultar el manual (consume cuota)       |
+| `GET`    | `/stats`                  | X-API-Key     | Sesiones activas + cuota restante hoy     |
+| `DELETE` | `/history/{session_id}`   | X-API-Key     | Borrar historial de una sesión propia     |
+| `GET`    | `/docs`                   | No            | Documentación Swagger interactiva         |
+
+### Endpoints de administración
+
+| Método    | Endpoint                   | Auth            | Descripción                              |
+|-----------|----------------------------|-----------------|------------------------------------------|
+| `POST`    | `/admin/clients`           | X-Admin-Secret  | Crear nuevo cliente con plan             |
+| `GET`     | `/admin/clients`           | X-Admin-Secret  | Listar todos los clientes y cuotas       |
+| `PATCH`   | `/admin/clients/{id}`      | X-Admin-Secret  | Cambiar plan o desactivar cliente        |
+| `GET`     | `/admin/usage?days=7`      | X-Admin-Secret  | Informe de uso de tokens por cliente     |
+| `GET`     | `/admin/plans`             | X-Admin-Secret  | Ver planes disponibles y límites         |
 
 ### POST `/query`
 
@@ -267,12 +280,14 @@ async function preguntar(pregunta) {
 
 Referencia completa de `.env`:
 
-| Variable         | Obligatoria | Descripción                                          |
-|------------------|-------------|------------------------------------------------------|
-| `GROQ_API_KEY`   | **Sí**      | Clave API de https://console.groq.com                |
-| `CLIENT_API_KEY` | Recomendada | Contraseña de acceso a la API (dejar vacío = sin auth) |
-| `API_PORT`       | No          | Puerto del servidor (default: `8088`)                |
-| `APP_URL`        | No          | Origen CORS permitido (default: `*` = todos)         |
+| Variable         | Obligatoria | Descripción                                                     |
+|------------------|-------------|-----------------------------------------------------------------|
+| `GROQ_API_KEY`   | **Sí**      | Clave API de https://console.groq.com                           |
+| `CLIENT_API_KEY` | Recomendada | API key del cliente demo/principal (se registra automáticamente en SQLite al arrancar) |
+| `ADMIN_SECRET`   | Recomendada | Contraseña para los endpoints `/admin/*` (generar con `openssl rand -hex 24`) |
+| `API_PORT`       | No          | Puerto del servidor (default: `8088`)                           |
+| `APP_URL`        | No          | Origen CORS permitido (default: `*` = todos)                    |
+| `SAAS_DB_PATH`   | No          | Ruta a la DB SQLite SaaS (default: `chatbot_saas.db`)           |
 
 ---
 
@@ -293,11 +308,12 @@ Formato de cada entrada:
 
 ## Seguridad
 
-- `.env` nunca se sube al repositorio (incluido en `.gitignore`)
+- `.env` y `chatbot_saas.db` nunca se suben al repositorio (incluidos en `.gitignore`)
 - Los PDFs del cliente nunca se suben al repositorio
-- `CLIENT_API_KEY` protege el acceso a todos los endpoints autenticados
+- Cada cliente tiene su propia `X-API-Key` — autenticación multi-tenant con SQLite
+- Los endpoints `/admin/*` requieren cabecera `X-Admin-Secret` separada
 - `APP_URL` restringe CORS al dominio del cliente (usar dominio concreto en producción, no `*`)
-- Cada usuario tiene historial aislado por `session_id`
+- Cada usuario tiene historial aislado por `session_id`, vinculado a su cliente
 
 ---
 
@@ -313,110 +329,84 @@ Formato de cada entrada:
 
 ---
 
-## Despliegue multi-organización (SaaS)
+## Despliegue multi-tenant (SaaS)
 
-Este apartado documenta cómo distribuir el chatbot a múltiples organizaciones desde un único servidor centralizado — por ejemplo, como complemento de una plataforma SaaS donde cada organización contratante tiene una cuota de consultas diarias.
+El sistema incluye soporte nativo para múltiples clientes desde un único servidor. No requiere Redis ni dependencias externas: usa SQLite embebido.
 
 ### Arquitectura
 
 ```
-┌─────────────────────────────────────────────┐
-│           Servidor central (SaaS)            │
-│                                              │
-│  ┌──────────────────────────────────────┐   │
-│  │  Chatbot Service (FastAPI)            │   │
-│  │                                      │   │
-│  │  FAISS index único (manuales SaaS)   │   │
-│  │  Redis → cuotas por org_id           │   │
-│  └──────────────────────────────────────┘   │
-│                                              │
-└──────────────────────────────────────────────┘
-         ▲                ▲               ▲
-    Organización A   Organización B   Organización C
-    (100 q/día)      (100 q/día)      (500 q/día)
+┌─────────────────────────────────────────────────┐
+│              Servidor central (SaaS)              │
+│                                                   │
+│  ┌───────────────────────────────────────────┐   │
+│  │  Chatbot Service v3.0 (FastAPI)            │   │
+│  │                                            │   │
+│  │  FAISS index (manuales) — compartido       │   │
+│  │  SQLite (chatbot_saas.db) — clientes/cuota │   │
+│  └───────────────────────────────────────────┘   │
+│                                                   │
+└───────────────────────────────────────────────────┘
+         ▲                 ▲                ▲
+    Cliente A          Cliente B        Cliente C
+    plan=free          plan=basic       plan=enterprise
+    5k tokens/día      50k tokens/día   ilimitado
 ```
 
-El índice FAISS es **compartido** — contiene los manuales del proveedor SaaS, indexados una sola vez. No hay aislamiento de documentos por cliente porque todos consultan la misma base de conocimiento.
+### Planes disponibles
 
-### Cambios necesarios en el código
+| Plan         | Tokens/día | PDF máximo | Descripción                    |
+|--------------|-----------|------------|--------------------------------|
+| `free`       | 5.000     | 5 MB       | Pruebas y demos                |
+| `basic`      | 50.000    | 20 MB      | Pequeñas empresas              |
+| `pro`        | 500.000   | 50 MB      | Uso intensivo                  |
+| `enterprise` | Ilimitado | 100 MB     | Sin restricciones              |
 
-**1. Añadir `org_id` al endpoint `/query`**
+### Gestión de clientes (API admin)
 
-```python
-class QueryRequest(BaseModel):
-    question: str
-    session_id: str = ""
-    lang: str = "es"
-    org_id: str  # ← nuevo campo obligatorio
+```bash
+# Variables necesarias
+ADMIN_SECRET="tu_admin_secret_del_.env"
+API_URL="http://127.0.0.1:8088"
+
+# Crear nuevo cliente
+curl -X POST $API_URL/admin/clients \
+  -H "X-Admin-Secret: $ADMIN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Empresa ABC", "plan": "basic"}'
+# Devuelve: {"client": {"id": 2, "api_key": "ck_...", "plan": "basic"}}
+
+# Listar clientes con cuota restante hoy
+curl $API_URL/admin/clients -H "X-Admin-Secret: $ADMIN_SECRET"
+
+# Cambiar plan de un cliente
+curl -X PATCH $API_URL/admin/clients/2 \
+  -H "X-Admin-Secret: $ADMIN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"plan": "pro"}'
+
+# Desactivar cliente (bloquear acceso sin borrar)
+curl -X PATCH $API_URL/admin/clients/2 \
+  -H "X-Admin-Secret: $ADMIN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"active": false}'
+
+# Informe de uso últimos 7 días
+curl "$API_URL/admin/usage?days=7" -H "X-Admin-Secret: $ADMIN_SECRET"
 ```
 
-**2. Middleware de cuota diaria (Redis)**
+### Flujo de integración
 
-```python
-import redis
-from fastapi import HTTPException
+1. Tú creas el cliente con `POST /admin/clients` → recibes su `api_key`
+2. Proporcionas esa `api_key` al cliente (en su panel, por email, etc.)
+3. El cliente incluye `X-API-Key: {api_key}` en cada llamada
+4. El sistema verifica la cuota antes de cada consulta al LLM
+5. Si supera la cuota diaria → HTTP 429 automático
+6. Los contadores se reinician a las 00:00 UTC cada día
 
-r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+### Consultar cuota desde el lado cliente
 
-CUOTAS = {
-    "standard_plus": 100,   # queries/día
-    "premium":       500,
-}
-
-def check_quota(org_id: str, plan: str):
-    key = f"quota:{org_id}:{date.today()}"
-    uso = r.incr(key)
-    if uso == 1:
-        r.expire(key, 86400)  # expira a medianoche (24h)
-    limite = CUOTAS.get(plan, 100)
-    if uso > limite:
-        raise HTTPException(429, f"Cuota diaria alcanzada ({limite} consultas/día)")
+```bash
+curl http://IP:PUERTO/stats -H "X-API-Key: ck_abc123..."
+# {"plan":"basic","quota":{"daily_limit":50000,"used_today":1234,"remaining":48766}}
 ```
-
-**3. Auth por organización**
-
-En lugar de una `CLIENT_API_KEY` global, cada organización tiene su propia key que identifica el `org_id` y el `plan` contratado:
-
-```python
-ORG_KEYS = {
-    "key_org_abc123": {"org_id": "org_A", "plan": "standard_plus"},
-    "key_org_xyz789": {"org_id": "org_B", "plan": "premium"},
-}
-
-def get_org(api_key: str = Header(..., alias="X-API-Key")):
-    org = ORG_KEYS.get(api_key)
-    if not org:
-        raise HTTPException(401, "API key inválida")
-    return org
-```
-
-En producción, estas keys se almacenarían en base de datos y se generarían automáticamente al activar el complemento para cada organización.
-
-**4. Endpoint `/query` con cuota integrada**
-
-```python
-@app.post("/query")
-async def query(req: QueryRequest, org=Depends(get_org)):
-    check_quota(org["org_id"], org["plan"])
-    # ... lógica RAG normal
-```
-
-### Variables de entorno adicionales
-
-| Variable       | Descripción                                  |
-|----------------|----------------------------------------------|
-| `REDIS_URL`    | URL de Redis (default: `redis://localhost:6379`) |
-| `DEFAULT_PLAN` | Plan por defecto si no se especifica (`standard_plus`) |
-
-### Resumen del flujo
-
-1. La plataforma SaaS activa el complemento para una organización → genera una `X-API-Key` única
-2. El frontend SaaS incluye esa key en cada llamada al chatbot
-3. El chatbot valida la key, identifica la organización y verifica la cuota diaria en Redis
-4. Si hay cuota disponible, responde; si no, devuelve `HTTP 429`
-5. El contador se reinicia automáticamente cada 24 horas
-
-### Requisitos adicionales
-
-- **Redis 6+** instalado en el mismo servidor o accesible por red interna
-- La gestión de organizaciones y keys debería hacerse desde un panel de administración o directamente desde la base de datos de la plataforma SaaS

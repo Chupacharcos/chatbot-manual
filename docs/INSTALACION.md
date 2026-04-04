@@ -73,7 +73,9 @@ El instalador hace todo de forma interactiva:
 
 2. **Clave Groq:** pega la clave del paso 1
 
-3. **CLIENT_API_KEY:** inventa una contrasena para proteger la API (p. ej. `mi-clave-secreta-2024`)
+3. **CLIENT_API_KEY:** clave del cliente principal/demo (se registra automáticamente en el sistema SaaS)
+
+4. **ADMIN_SECRET:** contraseña para el panel de administración SaaS — generada automáticamente si no se indica
 
 4. **Puerto:** acepta el valor por defecto `8088` o cambialo si ya esta ocupado
 
@@ -107,7 +109,7 @@ curl -X POST http://127.0.0.1:8088/query \
 
 Respuesta esperada del health check:
 ```json
-{"status":"ok","message":"Asistente Virtual IA activo","version":"2.1"}
+{"status":"ok","message":"Asistente Virtual IA activo","version":"3.0","features":["static_index","dynamic_pdf_upload","saas_multi_tenant"]}
 ```
 
 ---
@@ -211,7 +213,7 @@ sudo systemctl restart chatbot
 |---------------------------------|------------------------------------------------|
 | El servicio no arranca          | `sudo journalctl -u chatbot -n 50`            |
 | La API no responde              | `tail -f logs/api.log`                         |
-| Error 403 / Unauthorized        | Comprueba que `X-API-Key` coincide con `.env` |
+| Error 403 / Unauthorized        | Comprueba que `X-API-Key` existe en `/admin/clients` y el cliente está activo |
 | El chatbot dice que no sabe     | Los PDFs no estan procesados — ver paso 3      |
 | nginx da 502 Bad Gateway        | Comprueba que el servicio esta activo          |
 
@@ -223,14 +225,24 @@ Para cualquier problema, los logs detallados estan en `logs/api.log`.
 
 URL base: la que configuraste en `PUBLIC_API_URL` del `.env`
 
-| Endpoint       | Metodo | Auth | Descripcion              |
-|----------------|--------|------|--------------------------|
-| `/`            | GET    | No   | Estado del servidor      |
-| `/query`       | POST   | Si   | Hacer una pregunta       |
-| `/upload`      | POST   | No   | Subir PDF (modo dinamico)|
-| `/docs`        | GET    | No   | Documentacion Swagger    |
+**Endpoints cliente** (auth: `X-API-Key: tu_api_key`):
 
-Autenticacion: cabecera `X-API-Key: tu_client_api_key`
+| Endpoint               | Metodo | Descripcion                      |
+|------------------------|--------|----------------------------------|
+| `/`                    | GET    | Estado del servidor              |
+| `/query`               | POST   | Hacer una pregunta               |
+| `/upload`              | POST   | Subir PDF (modo dinamico)        |
+| `/stats`               | GET    | Cuota restante hoy               |
+| `/docs`                | GET    | Documentacion Swagger            |
+
+**Endpoints admin** (auth: `X-Admin-Secret: tu_admin_secret`):
+
+| Endpoint               | Metodo | Descripcion                      |
+|------------------------|--------|----------------------------------|
+| `/admin/clients`       | GET    | Listar clientes y cuotas         |
+| `/admin/clients`       | POST   | Crear nuevo cliente              |
+| `/admin/clients/{id}`  | PATCH  | Cambiar plan o desactivar        |
+| `/admin/usage`         | GET    | Informe de uso de tokens         |
 
 Ejemplo de consulta:
 ```bash
