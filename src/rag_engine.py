@@ -95,10 +95,13 @@ class RAGEngine:
             max_tokens=1024
         )
 
+        usage = res.usage
         return {
             "answer": res.choices[0].message.content,
             "sources": reranked,
-            "lang": lang
+            "lang": lang,
+            "tokens_in":  getattr(usage, "prompt_tokens", 0),
+            "tokens_out": getattr(usage, "completion_tokens", 0),
         }
 
     def query_with_context(self, question: str, context: str, lang: str = "es", history: list = None, persona: str = "") -> dict:
@@ -165,12 +168,15 @@ Pregunta: {question}"""
             )
 
             answer = response.choices[0].message.content.strip()
+            usage = response.usage
 
             return {
                 "answer": answer,
                 "lang": detected_lang,
                 "sources": [],
-                "model": LLM_MODEL
+                "model": LLM_MODEL,
+                "tokens_in":  getattr(usage, "prompt_tokens", 0),
+                "tokens_out": getattr(usage, "completion_tokens", 0),
             }
 
         except Exception as e:
@@ -178,5 +184,7 @@ Pregunta: {question}"""
                 "answer": f"Error generando respuesta: {str(e)}",
                 "lang": detected_lang,
                 "sources": [],
-                "error": str(e)
+                "error": str(e),
+                "tokens_in": 0,
+                "tokens_out": 0,
             }

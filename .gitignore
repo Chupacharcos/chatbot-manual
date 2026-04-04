@@ -47,5 +47,8 @@ Thumbs.db
 # ─── Logs generados automáticamente ────────────────────
 logs/
 
+# ─── SaaS DB (contiene API keys de clientes — no subir) ─────
+chatbot_saas.db
+
 # ─── Mejoras ─────────────────────────────────────────────────
 mejoras.txt
