@@ -106,9 +106,9 @@ def require_admin(x_admin_secret: str = Header(default="")):
 
 rag = RAGEngine()
 
-print("🧮 Cargando modelo de embeddings...")
-embedding_model = SentenceTransformer(EMBEDDINGS_MODEL)
-print("✅ Modelo de embeddings cargado")
+# Reutilizar el modelo ya cargado por RAGEngine: antes se instanciaba una
+# SEGUNDA copia del mismo modelo (~1GB duplicado en RAM).
+embedding_model = rag.embeddings_model
 
 # ─── Sesiones ─────────────────────────────────────────────────────────────────
 

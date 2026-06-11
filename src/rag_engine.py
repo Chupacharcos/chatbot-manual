@@ -10,7 +10,9 @@ load_dotenv()
 
 # --- CONSTANTES REQUERIDAS POR LA API ---
 MAX_HISTORY = 4  # Número de turnos (pares user/assistant) que recuerda el chat
-EMBEDDINGS_MODEL = "intfloat/multilingual-e5-large"
+# e5-base (768d): ~1.1GB menos de RAM que e5-large con perdida de calidad
+# modesta. Los indices FAISS estaticos se regeneran re-embebiendo chunks.pkl.
+EMBEDDINGS_MODEL = "intfloat/multilingual-e5-base"
 RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 LLM_MODEL = "llama-3.1-8b-instant"
 
