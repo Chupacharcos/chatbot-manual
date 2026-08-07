@@ -1,5 +1,8 @@
+import gc
 import os
 import pickle
+import threading
+import time
 import faiss
 from datetime import datetime
 from sentence_transformers import SentenceTransformer, CrossEncoder
@@ -15,13 +18,23 @@ MAX_HISTORY = 4  # Número de turnos (pares user/assistant) que recuerda el chat
 EMBEDDINGS_MODEL = "intfloat/multilingual-e5-base"
 RERANKER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 LLM_MODEL = "llama-3.1-8b-instant"
+# El widget del chatbot está en todas las páginas, así que el servicio no puede
+# apagarse como las demos; en su lugar suelta los modelos cuando nadie pregunta.
+IDLE_RELEASE_SECONDS = 30 * 60
+IDLE_CHECK_SECONDS = 5 * 60
 
 
 class RAGEngine:
     def __init__(self):
         print("🔧 Inicializando RAG Engine...")
-        self.embeddings_model = SentenceTransformer(EMBEDDINGS_MODEL)
-        self.reranker = CrossEncoder(RERANKER_MODEL)
+        # Los dos modelos se cargan la primera vez que se usan, no al arrancar.
+        # Juntos ocupan ~600 MB y el servicio estaba residente con ellos dentro
+        # aunque nadie consultara el chatbot en horas. Las propiedades de abajo
+        # mantienen intacta la interfaz: quien haga `rag.embeddings_model`
+        # sigue recibiendo el modelo, sólo que se construye en ese momento.
+        self._embeddings_model = None
+        self._reranker = None
+        self._last_used = 0.0
         self.llm = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.indices = {}
         self.chunks_data = {}
@@ -33,6 +46,40 @@ class RAGEngine:
             "ca": "Català",
             "pt": "Português"
         }
+
+    @property
+    def embeddings_model(self):
+        self._last_used = time.time()
+        if self._embeddings_model is None:
+            print(f"🔧 Cargando modelo de embeddings ({EMBEDDINGS_MODEL})…")
+            self._embeddings_model = SentenceTransformer(EMBEDDINGS_MODEL)
+        return self._embeddings_model
+
+    @property
+    def reranker(self):
+        self._last_used = time.time()
+        if self._reranker is None:
+            print(f"🔧 Cargando reranker ({RERANKER_MODEL})…")
+            self._reranker = CrossEncoder(RERANKER_MODEL)
+        return self._reranker
+
+    def release_if_idle(self, idle_seconds: int = IDLE_RELEASE_SECONDS) -> bool:
+        """Suelta los modelos si llevan `idle_seconds` sin usarse.
+
+        Sin esto, la carga diferida sólo ahorraba memoria hasta la primera
+        consulta: a partir de ahí el proceso se quedaba con los ~600 MB dentro
+        para siempre, porque Python no devuelve al sistema la memoria de un
+        objeto grande sólo con que deje de referenciarse.
+        """
+        if self._embeddings_model is None and self._reranker is None:
+            return False
+        if time.time() - self._last_used < idle_seconds:
+            return False
+        self._embeddings_model = None
+        self._reranker = None
+        gc.collect()
+        print(f"💤 Modelos liberados tras {idle_seconds}s sin uso")
+        return True
 
     def _load_index(self, lang):
         if lang in self.indices:
@@ -190,3 +237,15 @@ Pregunta: {question}"""
                 "tokens_in": 0,
                 "tokens_out": 0,
             }
+
+def start_idle_watcher(engine: "RAGEngine") -> None:
+    """Hilo de fondo que libera los modelos del engine cuando nadie los usa."""
+    def loop():
+        while True:
+            time.sleep(IDLE_CHECK_SECONDS)
+            try:
+                engine.release_if_idle()
+            except Exception as e:  # nunca debe tumbar el servicio
+                print(f"⚠️ idle watcher: {e}")
+
+    threading.Thread(target=loop, daemon=True, name="idle-watcher").start()

@@ -18,7 +18,7 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from rag_engine import RAGEngine, MAX_HISTORY
+from rag_engine import RAGEngine, MAX_HISTORY, start_idle_watcher
 from process_manual import (
     extract_text_from_pdf,
     extract_sections,
@@ -106,9 +106,15 @@ def require_admin(x_admin_secret: str = Header(default="")):
 
 rag = RAGEngine()
 
-# Reutilizar el modelo ya cargado por RAGEngine: antes se instanciaba una
-# SEGUNDA copia del mismo modelo (~1GB duplicado en RAM).
-embedding_model = rag.embeddings_model
+# Vigila la inactividad y suelta los modelos cuando nadie consulta.
+start_idle_watcher(rag)
+
+# Se accede al modelo a través del engine en cada uso, no se guarda aquí una
+# referencia: hacerlo al importar el módulo forzaba la carga en el arranque y
+# anulaba la carga diferida. Sigue habiendo una sola copia en memoria, la del
+# engine.
+def embedding_model():
+    return rag.embeddings_model
 
 # ─── Sesiones ─────────────────────────────────────────────────────────────────
 
@@ -185,7 +191,7 @@ def build_faiss_index_from_pdf(pdf_path: str, lang: str = "es") -> tuple:
     log.info(f"✅ {len(chunks)} chunks (chunk_size={dyn_chunk})")
 
     texts = [c["text"] for c in chunks]
-    embeddings = embedding_model.encode(texts, show_progress_bar=False)
+    embeddings = embedding_model().encode(texts, show_progress_bar=False)
     dimension = embeddings.shape[1]
     index = faiss.IndexFlatL2(dimension)
     index.add(embeddings.astype('float32'))
@@ -226,7 +232,7 @@ def query_session_index(session_id: str, question: str, lang: str = "es", top_k:
     session = sessions[session_id]
     index = session["faiss_index"]
     chunks = session["chunks"]
-    q_emb = embedding_model.encode([question], show_progress_bar=False)[0]
+    q_emb = embedding_model().encode([question], show_progress_bar=False)[0]
     distances, indices = index.search(
         np.array([q_emb]).astype('float32'),
         min(top_k, len(chunks))
