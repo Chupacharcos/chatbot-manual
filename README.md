@@ -2,6 +2,34 @@
 
 Sistema de chatbot inteligente para consultar documentos empresariales basado en RAG (Retrieval-Augmented Generation). Combina búsqueda semántica vectorial con búsqueda por palabras clave para garantizar que el asistente encuentre la información relevante independientemente de cómo formule la pregunta el usuario.
 
+<!-- LOOP-MAP:START (generado por `php artisan project:loop readme` — no editar a mano) -->
+
+## El bucle que cierra
+
+<p align="center"><img src="https://adrianmoreno-dev.com/bucle/chatbot-manual.svg" alt="Mapa del bucle de Chatbot Manual" width="900"></p>
+
+**Para** quien atiende dudas sobre la documentación de un producto · **Cada vez que llega un manual nuevo**
+
+| Etapa | Qué pasa | Quién |
+|---|---|---|
+| **1. Disparador** | Tengo un manual en PDF y necesito que la gente pueda preguntarle en vez de leerlo. | persona |
+| **2. Acción** | Trocea el PDF, genera los embeddings multiidioma, los indexa en FAISS y responde con un reranker sobre lo recuperado. | software |
+| **3. Medición** | La respuesta en el idioma de la pregunta, construida solo con los fragmentos recuperados del manual. | software |
+| **4. Decisión** | Decido si el asistente ya está listo para publicarlo o si tengo que ajustar su rol. | persona |
+
+### Lo que no hace
+
+- No responde fuera del manual: si la respuesta no está en el documento indexado, lo dice.
+- En modo producción el índice se genera antes: un PDF nuevo no es consultable hasta reprocesarlo.
+- No gestiona documentos: no versiona ni edita nada, solo consulta lo que ya está indexado.
+
+### Por qué está construido así
+
+- **FAISS con índices en disco** en vez de una base de datos vectorial con servicio propio — El índice de un manual cabe en un fichero y se sirve pre-procesado, así que no hay un servicio más que mantener.
+- **Embeddings multiidioma** en vez de un índice por idioma con embeddings monolingües — Con un modelo multiidioma la misma pregunta encuentra el fragmento aunque el manual esté en otra lengua.
+
+<!-- LOOP-MAP:END -->
+
 ## Características
 
 - **Búsqueda híbrida**: semántica (FAISS) + palabras clave, con normalización de acentos
